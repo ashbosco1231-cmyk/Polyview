@@ -1,0 +1,430 @@
+<title>Sharpline — TruthTick Teardown & Blueprint</title>
+<style>
+  :root {
+    --ground: #f6f4ee;
+    --panel: #fffdf8;
+    --panel-2: #efece3;
+    --ink: #1a1c1a;
+    --ink-soft: #4a4d47;
+    --ink-faint: #797d74;
+    --hair: #d9d5c8;
+    --hair-soft: #e6e2d6;
+    --amber: #b06f18;
+    --amber-bright: #d98a1f;
+    --up: #1f8a5b;
+    --down: #c0392b;
+    --keep: #1f8a5b;
+    --kill: #c0392b;
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0f1311;
+      --panel: #171b18;
+      --panel-2: #1e2320;
+      --ink: #eceae2;
+      --ink-soft: #b4b7ac;
+      --ink-faint: #7f857a;
+      --hair: #2c322d;
+      --hair-soft: #232824;
+      --amber: #e2a24a;
+      --amber-bright: #f0b356;
+      --up: #3fb68b;
+      --down: #e5645a;
+      --keep: #3fb68b;
+      --kill: #e5645a;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f4ee; --panel: #fffdf8; --panel-2: #efece3; --ink: #1a1c1a;
+    --ink-soft: #4a4d47; --ink-faint: #797d74; --hair: #d9d5c8; --hair-soft: #e6e2d6;
+    --amber: #b06f18; --amber-bright: #d98a1f; --up: #1f8a5b; --down: #c0392b;
+    --keep: #1f8a5b; --kill: #c0392b;
+  }
+  :root[data-theme="dark"] {
+    --ground: #0f1311; --panel: #171b18; --panel-2: #1e2320; --ink: #eceae2;
+    --ink-soft: #b4b7ac; --ink-faint: #7f857a; --hair: #2c322d; --hair-soft: #232824;
+    --amber: #e2a24a; --amber-bright: #f0b356; --up: #3fb68b; --down: #e5645a;
+    --keep: #3fb68b; --kill: #e5645a;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+
+  /* ticker */
+  .ticker { border-bottom: 1px solid var(--hair); background: var(--panel);
+    font-family: var(--mono); font-size: 12px; letter-spacing: .02em; overflow: hidden;
+    white-space: nowrap; color: var(--ink-soft); }
+  .ticker__track { display: inline-block; padding: 9px 0; animation: slide 38s linear infinite; }
+  .ticker__track span { margin: 0 22px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .tabnum { font-variant-numeric: tabular-nums; }
+  @keyframes slide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .ticker__track { animation: none; } }
+
+  /* hero */
+  header.hero { padding: 68px 0 40px; border-bottom: 1px solid var(--hair); }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber); margin: 0 0 22px; }
+  .wordmark { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .wordmark h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(46px, 9vw, 88px);
+    line-height: .95; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+  .wordmark .glyph { font-family: var(--mono); font-size: clamp(20px, 4vw, 30px); color: var(--amber-bright);
+    letter-spacing: -0.05em; }
+  .lede { font-family: var(--serif); font-size: clamp(19px, 2.6vw, 25px); line-height: 1.42;
+    color: var(--ink-soft); max-width: 40ch; margin: 26px 0 0; text-wrap: pretty; }
+  .renamed { margin-top: 26px; font-size: 14px; color: var(--ink-faint); }
+  .renamed b { color: var(--ink); }
+  .strike { text-decoration: line-through; text-decoration-color: var(--down); text-decoration-thickness: 2px; }
+
+  /* section scaffolding */
+  section { padding: 54px 0; border-bottom: 1px solid var(--hair); }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin: 0 0 30px; }
+  .sec-num { font-family: var(--mono); font-size: 13px; color: var(--amber); letter-spacing: .05em;
+    padding-top: 6px; }
+  .sec-head h2 { font-family: var(--serif); font-weight: 600; font-size: clamp(27px, 4.4vw, 38px);
+    line-height: 1.08; letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+  .sec-head p { margin: 8px 0 0; color: var(--ink-faint); font-size: 15px; }
+  p.body { max-width: 66ch; color: var(--ink-soft); }
+  p.body strong { color: var(--ink); }
+
+  /* terminal mock */
+  .terminal { background: var(--panel); border: 1px solid var(--hair); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 24px 60px -34px rgba(0,0,0,.5); }
+  .term-bar { display: flex; align-items: center; gap: 10px; padding: 11px 16px;
+    border-bottom: 1px solid var(--hair); background: var(--panel-2); font-family: var(--mono);
+    font-size: 12.5px; color: var(--ink-soft); }
+  .term-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--hair); }
+  .term-bar .mkt { color: var(--ink); font-weight: 600; }
+  .term-bar .pct { margin-left: auto; color: var(--up); font-variant-numeric: tabular-nums; }
+  .term-body { display: grid; grid-template-columns: 1fr 232px; }
+  @media (max-width: 620px) { .term-body { grid-template-columns: 1fr; } }
+  .chart-cell { padding: 14px 14px 6px; border-right: 1px solid var(--hair); min-width: 0; }
+  @media (max-width: 620px) { .chart-cell { border-right: none; border-bottom: 1px solid var(--hair); } }
+  canvas { display: block; width: 100%; height: auto; }
+  .chart-foot { display: flex; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+    padding: 8px 2px 4px; letter-spacing: .03em; }
+  .book { padding: 12px 14px; font-family: var(--mono); font-size: 12px; }
+  .book h4 { margin: 0 0 9px; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-faint); font-family: var(--sans); font-weight: 600; }
+  .row { display: flex; justify-content: space-between; padding: 3px 0; position: relative;
+    font-variant-numeric: tabular-nums; }
+  .row .depth { position: absolute; top: 0; bottom: 0; right: 0; opacity: .13; border-radius: 2px; }
+  .row.ask .depth { background: var(--down); } .row.bid .depth { background: var(--up); }
+  .row span { position: relative; z-index: 1; }
+  .row.ask .px { color: var(--down); } .row.bid .px { color: var(--up); }
+  .spread { text-align: center; color: var(--ink-faint); padding: 7px 0; margin: 4px 0;
+    border-top: 1px dashed var(--hair); border-bottom: 1px dashed var(--hair); font-size: 11px; }
+
+  /* mechanics list */
+  .flow { display: grid; gap: 0; margin-top: 8px; }
+  .flow-step { display: grid; grid-template-columns: 30px 1fr; gap: 18px; padding: 18px 0;
+    border-top: 1px solid var(--hair-soft); }
+  .flow-step:first-child { border-top: none; }
+  .flow-step .k { font-family: var(--mono); font-size: 13px; color: var(--amber); padding-top: 2px; }
+  .flow-step h4 { margin: 0 0 5px; font-size: 16px; font-weight: 650; }
+  .flow-step p { margin: 0; color: var(--ink-soft); font-size: 14.5px; max-width: 62ch; }
+  .flow-step .mono { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+
+  /* keep / kill columns */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+  .col h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    margin: 0 0 4px; display: flex; align-items: center; gap: 9px; }
+  .col.keep h3 { color: var(--keep); } .col.kill h3 { color: var(--kill); }
+  .col .tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-family: var(--sans); font-weight: 600; }
+  .col.keep .tag { background: color-mix(in srgb, var(--keep) 16%, transparent); color: var(--keep); }
+  .col.kill .tag { background: color-mix(in srgb, var(--kill) 16%, transparent); color: var(--kill); }
+  .item { padding: 15px 0; border-top: 1px solid var(--hair-soft); }
+  .item:first-of-type { border-top: 2px solid var(--ink); margin-top: 12px; }
+  .item h4 { margin: 0 0 4px; font-size: 15.5px; font-weight: 650; display: flex; gap: 9px; }
+  .item h4 .mk { font-family: var(--mono); font-size: 12px; padding-top: 2px; }
+  .item.keep h4 .mk { color: var(--keep); } .item.kill h4 .mk { color: var(--kill); }
+  .item p { margin: 0; font-size: 13.8px; color: var(--ink-soft); line-height: 1.5; }
+  .item .fix { display: block; margin-top: 6px; font-size: 13px; color: var(--ink-faint); }
+  .item .fix b { color: var(--amber); font-weight: 650; }
+
+  /* blueprint grid */
+  .blue-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 6px; }
+  @media (max-width: 720px) { .blue-grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 9px; padding: 20px; }
+  .card .ic { font-family: var(--mono); font-size: 12px; color: var(--amber); letter-spacing: .05em; }
+  .card h4 { margin: 10px 0 6px; font-size: 17px; font-weight: 650; font-family: var(--serif); }
+  .card p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+  .card.wide { grid-column: 1 / -1; background: var(--panel-2); }
+
+  /* roadmap */
+  .road { display: grid; gap: 0; margin-top: 8px; counter-reset: ph; }
+  .phase { display: grid; grid-template-columns: 150px 1fr; gap: 22px; padding: 18px 0;
+    border-top: 1px solid var(--hair-soft); }
+  @media (max-width: 620px) { .phase { grid-template-columns: 1fr; gap: 6px; } }
+  .phase:first-child { border-top: none; }
+  .phase .ph-k { font-family: var(--mono); font-size: 12.5px; color: var(--amber); letter-spacing: .04em; }
+  .phase .ph-k b { display: block; color: var(--ink); font-family: var(--serif); font-size: 17px;
+    font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+  .phase p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+  /* pricing */
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+  @media (max-width: 720px) { .tiers { grid-template-columns: 1fr; } }
+  .tier { border: 1px solid var(--hair); border-radius: 9px; padding: 20px; background: var(--panel); }
+  .tier.feat { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+  .tier .nm { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); }
+  .tier .pr { font-family: var(--serif); font-size: 30px; font-weight: 600; margin: 8px 0 12px;
+    font-variant-numeric: tabular-nums; }
+  .tier .pr small { font-size: 14px; color: var(--ink-faint); font-family: var(--sans); font-weight: 400; }
+  .tier ul { margin: 0; padding-left: 0; list-style: none; }
+  .tier li { font-size: 13.5px; color: var(--ink-soft); padding: 5px 0 5px 18px; position: relative; }
+  .tier li::before { content: "→"; position: absolute; left: 0; color: var(--amber); }
+
+  /* names */
+  .names { display: grid; gap: 12px; margin-top: 8px; }
+  .name-row { display: grid; grid-template-columns: 160px 1fr; gap: 20px; align-items: baseline;
+    padding: 16px 0; border-top: 1px solid var(--hair-soft); }
+  @media (max-width: 620px) { .name-row { grid-template-columns: 1fr; gap: 4px; } }
+  .name-row:first-child { border-top: none; }
+  .name-row .nn { font-family: var(--serif); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+  .name-row.pick .nn { color: var(--amber); }
+  .name-row .badge { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--amber); margin-left: 10px; vertical-align: middle; }
+  .name-row p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+  footer { padding: 40px 0 60px; }
+  footer p { font-size: 12.5px; color: var(--ink-faint); font-family: var(--mono); line-height: 1.7;
+    max-width: 74ch; }
+  .callout { background: var(--panel-2); border-left: 3px solid var(--amber); padding: 16px 20px;
+    margin: 22px 0 0; border-radius: 0 7px 7px 0; }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .callout p strong { color: var(--ink); }
+</style>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker__track" id="tick">
+    <span>POLY:BTC&gt;68.5¢ <b class="up tabnum">▲ 0.041</b></span>
+    <span>KALSHI:FED-CUT-JUL <b class="down tabnum">▼ 0.018</b></span>
+    <span>POLY:ELECTION-OUTCOME <b class="up tabnum">▲ 0.007</b></span>
+    <span>CROSS-VENUE SPREAD <b class="up tabnum">+2.3%</b></span>
+    <span>WHALE PRINT 0x4f…a1 <b class="down tabnum">−$42,100</b></span>
+    <span>SCANNER: 20,412 MARKETS <b class="up tabnum">03:00</b></span>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Competitive Teardown · Product Blueprint</p>
+    <div class="wordmark">
+      <h1>Sharpline</h1>
+      <span class="glyph">// the terminal, done right</span>
+    </div>
+    <p class="lede">A prediction-market analytics terminal is a good idea trapped in a weak execution. Here's the teardown — and the version worth building.</p>
+    <p class="renamed">Reviewed: <span class="strike">TruthTick Terminal</span> &nbsp;→&nbsp; renamed <b>Sharpline</b> &nbsp;·&nbsp; a sharp is a professional bettor; a line is both the odds and the chart.</p>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <div>
+        <h2>What it actually is</h2>
+        <p>A read-only "TradingView for prediction markets," layered on Polymarket's public data.</p>
+      </div>
+    </div>
+
+    <div class="terminal" role="img" aria-label="Mock trading terminal showing a tick-candle chart and order book for a Polymarket Bitcoin market">
+      <div class="term-bar">
+        <span class="dot"></span>
+        <span class="mkt">POLY:BTC-ABOVE-68.5¢</span>
+        <span>· tick candles ·</span>
+        <span>N=50 trades/candle</span>
+        <span class="pct">64.2¢ ▲</span>
+      </div>
+      <div class="term-body">
+        <div class="chart-cell">
+          <canvas id="chart" width="640" height="240"></canvas>
+          <div class="chart-foot">
+            <span>OHLC + TICK</span><span>ORDERFLOW</span><span>VOLUME PROFILE</span><span>· live feed</span>
+          </div>
+        </div>
+        <div class="book">
+          <h4>Order Book</h4>
+          <div class="row ask"><span class="px">0.658</span><span class="tabnum">1,240</span><i class="depth" style="width:62%"></i></div>
+          <div class="row ask"><span class="px">0.651</span><span class="tabnum">2,905</span><i class="depth" style="width:88%"></i></div>
+          <div class="row ask"><span class="px">0.647</span><span class="tabnum">840</span><i class="depth" style="width:40%"></i></div>
+          <div class="spread">spread 0.006 · mid 0.644</div>
+          <div class="row bid"><span class="px">0.641</span><span class="tabnum">1,610</span><i class="depth" style="width:70%"></i></div>
+          <div class="row bid"><span class="px">0.636</span><span class="tabnum">3,120</span><i class="depth" style="width:95%"></i></div>
+          <div class="row bid"><span class="px">0.628</span><span class="tabnum">720</span><i class="depth" style="width:34%"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step"><span class="k">DATA</span><div><h4>Reads Polymarket's public feed</h4><p>Order book, executed-trade history, and metadata across <span class="mono">20,000+</span> markets. Non-custodial, unaffiliated, read-only — it never touches your funds.</p></div></div>
+      <div class="flow-step"><span class="k">BUILD</span><div><h4>Reconstructs candles from raw trades</h4><p>OHLC plus <strong>tick candles</strong> — one candle per N executed trades instead of per fixed time. Genuinely the right primitive for bursty market activity.</p></div></div>
+      <div class="flow-step"><span class="k">READ</span><div><h4>Trader-grade analytics on top</h4><p>Technical indicators, <strong>orderflow / footprint</strong> (buy vs. sell volume per price level), and volume profile — tools Polymarket's own UI doesn't give you.</p></div></div>
+      <div class="flow-step"><span class="k">SCAN</span><div><h4>Backtest, then scan every market</h4><p>Write a strategy in TypeScript against history; the scanner runs it across all 20,000+ markets in <span class="mono">&lt;3 min</span>, ranked by net P&amp;L. This is the real moat.</p></div></div>
+      <div class="flow-step"><span class="k">$</span><div><h4>Freemium, no execution</h4><p>Free charts + indicators; <strong>Pro at $19.99/mo</strong> adds custom indicators and backtesting. You still place trades on Polymarket itself.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <div>
+        <h2>Keep the sharp edges. Break off the dull ones.</h2>
+        <p>Six things it gets right, next to the nine that hold it back.</p>
+      </div>
+    </div>
+    <div class="split">
+      <div class="col keep">
+        <h3>Keep <span class="tag">6 strengths</span></h3>
+        <div class="item keep"><h4><span class="mk">01</span>Legible positioning</h4><p>"TradingView for prediction markets" needs no explanation to the target user.</p></div>
+        <div class="item keep"><h4><span class="mk">02</span>Tick candles</h4><p>The correct primitive for bursty, uneven prediction-market flow. Smart and defensible.</p></div>
+        <div class="item keep"><h4><span class="mk">03</span>Orderflow &amp; volume profile</h4><p>Real pro tooling absent from the native Polymarket interface.</p></div>
+        <div class="item keep"><h4><span class="mk">04</span>Market-wide P&amp;L scanner</h4><p>Turns a charting toy into an edge-finding engine. The single best idea here.</p></div>
+        <div class="item keep"><h4><span class="mk">05</span>Freemium, no card</h4><p>A genuinely useful free tier is a low-friction hook.</p></div>
+        <div class="item keep"><h4><span class="mk">06</span>Non-custodial &amp; read-only</h4><p>No fund custody → minimal legal and regulatory surface. Do not give this up.</p></div>
+      </div>
+      <div class="col kill">
+        <h3>Fix / Kill <span class="tag">9 weaknesses</span></h3>
+        <div class="item kill"><h4><span class="mk">01</span>Brand collision</h4><p>"Truth Terminal" is already a famous crypto-AI bot; "TruthTickTerminal" is three loaded words and hard to type.<span class="fix"><b>Fix →</b> rebrand to a short, platform-neutral name.</span></p></div>
+        <div class="item kill"><h4><span class="mk">02</span>Polymarket-only</h4><p>Forfeits the richest edge of all: cross-venue pricing vs. Kalshi.<span class="fix"><b>Fix →</b> go multi-venue early.</span></p></div>
+        <div class="item kill"><h4><span class="mk">03</span>No execution</h4><p>"Go trade elsewhere" betrays the word <em>terminal</em>.<span class="fix"><b>Fix →</b> non-custodial one-click execution (bring your own key).</span></p></div>
+        <div class="item kill"><h4><span class="mk">04</span>Backtesting needs code</h4><p>TypeScript locks the killer feature to programmers.<span class="fix"><b>Fix →</b> no-code + AI strategy builder; TS as the escape hatch.</span></p></div>
+        <div class="item kill"><h4><span class="mk">05</span>The scanner overfits</h4><p>Ranking 20,000 strategies by P&amp;L surfaces noise; reconstructed OHLC ignores slippage &amp; fees.<span class="fix"><b>Fix →</b> model fills/fees, walk-forward validation, overfit warnings.</span></p></div>
+        <div class="item kill"><h4><span class="mk">06</span>"Zero delay" is unprovable</h4><p>Reconstructed feeds can lag.<span class="fix"><b>Fix →</b> show data freshness &amp; latency openly.</span></p></div>
+        <div class="item kill"><h4><span class="mk">07</span>No alerts, no mobile</h4><p>Sharps live on alerts and on their phones.<span class="fix"><b>Fix →</b> alerting engine + mobile/PWA.</span></p></div>
+        <div class="item kill"><h4><span class="mk">08</span>No smart-money tracking</h4><p>Whale &amp; copy features are among the most-used in the ecosystem.<span class="fix"><b>Fix →</b> whale tracker + copy-signal feed.</span></p></div>
+        <div class="item kill"><h4><span class="mk">09</span>Thin price ladder</h4><p>Flat $19.99 with fuzzy gating.<span class="fix"><b>Fix →</b> clearer tiers + usage metering on scans.</span></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <div>
+        <h2>The version worth building</h2>
+        <p>Same strong core — now it closes the loop from signal to fill, across venues.</p>
+      </div>
+    </div>
+    <p class="body"><strong>Positioning:</strong> the professional analytics <em>and execution</em> terminal for prediction markets — across venues. Keep tick candles, orderflow, volume profile, the market-wide scanner, and the non-custodial stance. Then add the pieces that make it a terminal instead of a viewer.</p>
+    <div class="blue-grid">
+      <div class="card"><span class="ic">MULTI-VENUE</span><h4>Polymarket + Kalshi, unified</h4><p>One market view, a cross-venue arbitrage finder, and consensus odds — the edge no single-venue tool can offer.</p></div>
+      <div class="card"><span class="ic">EXECUTION</span><h4>Non-custodial one-click fills</h4><p>Bring your own API key or wallet. Trade from the chart without ever handing over custody of funds.</p></div>
+      <div class="card"><span class="ic">STRATEGY</span><h4>No-code + AI builder</h4><p>Describe a strategy in plain language or click it together. Rigorous validation — slippage, fees, walk-forward, a confidence score — so backtests tell the truth.</p></div>
+      <div class="card"><span class="ic">SIGNALS</span><h4>Alerts, whales &amp; copy</h4><p>Push alerts on mispricing, odds swings, whale prints and resolution deadlines. Track smart-money wallets and mirror their moves.</p></div>
+      <div class="card wide"><span class="ic">TRUST</span><h4>Honesty as a feature</h4><p>Visible data-freshness indicators, modeled fills instead of fantasy fills, and explicit overfit warnings. In a space full of unprovable "zero-delay" claims, credibility is the differentiator.</p></div>
+    </div>
+    <div class="callout"><p><strong>The one-line thesis:</strong> TruthTick built a great telescope and asked you to fly to the planet yourself. Sharpline is the telescope <em>and</em> the launch button — pointed at every venue at once.</p></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <div>
+        <h2>How it ships</h2>
+        <p>Four phases, each a standalone reason to sign up.</p>
+      </div>
+    </div>
+    <div class="road">
+      <div class="phase"><span class="ph-k">PHASE 1<b>MVP · Free</b></span><p>Polymarket OHLC + tick charts, orderflow, volume profile, live trades, watchlists, and basic alerts. The free hook, better than the original's.</p></div>
+      <div class="phase"><span class="ph-k">PHASE 2<b>Pro</b></span><p>No-code strategy builder, <em>validated</em> backtesting, the market-wide scanner, and non-custodial one-click execution on Polymarket.</p></div>
+      <div class="phase"><span class="ph-k">PHASE 3<b>Multi-venue</b></span><p>Kalshi integration → cross-venue arbitrage and consensus odds. Whale tracking, copy signals, and a mobile/PWA app.</p></div>
+      <div class="phase"><span class="ph-k">PHASE 4<b>Automation</b></span><p>Strategy automation, a public API, and team workspaces for funds and groups.</p></div>
+    </div>
+
+    <div class="tiers">
+      <div class="tier"><div class="nm">Free</div><div class="pr">$0</div><ul><li>Charts &amp; live data</li><li>One venue</li><li>Basic alerts</li><li>Limited watchlists</li></ul></div>
+      <div class="tier feat"><div class="nm">Pro</div><div class="pr">$24<small>/mo</small></div><ul><li>All indicators &amp; orderflow</li><li>Unlimited alerts</li><li>Validated backtesting</li><li>Multi-venue + execution</li></ul></div>
+      <div class="tier"><div class="nm">Edge</div><div class="pr">$79<small>/mo</small></div><ul><li>Scanner at full scale</li><li>Whale tracking</li><li>Execution automation</li><li>API access</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <div>
+        <h2>A name that can carry it</h2>
+        <p>"TruthTick Terminal" collides with a famous crypto bot, runs three words long, and drags in loaded connotations. It has to go.</p>
+      </div>
+    </div>
+    <div class="names">
+      <div class="name-row pick">
+        <span class="nn">Sharpline<span class="badge">recommended</span></span>
+        <p>A <em>sharp</em> is the trade term for a professional, informed bettor — exactly the user, exactly the "trade like a pro" pitch, minus the baggage. A <em>line</em> is both the betting line and the chart line. One word, ownable, easy to type, and platform-agnostic across Polymarket and Kalshi.</p>
+      </div>
+      <div class="name-row"><span class="nn">Oddscope</span><p>Odds + scope. Analytical and scannable; reads as a research instrument.</p></div>
+      <div class="name-row"><span class="nn">Edgewire</span><p>"Edge," the trader's advantage, over a live "wire" feed.</p></div>
+      <div class="name-row"><span class="nn">Vane</span><p>A weathervane reads which way the market is turning. Short, modern, brandable.</p></div>
+    </div>
+    <div class="callout"><p><strong>Note on <span style="font-family:var(--mono);font-size:.9em">Polyview</span>:</strong> fine as a working title, but "Poly" ties it to Polymarket — which quietly contradicts the multi-venue strategy. Pick a name that can hold Kalshi too.</p></div>
+  </section>
+
+  <footer>
+    <p>Sources — truthtickterminal.com (home + FAQ) · predic.tools · Kalshi Pro · prediction-market tooling ecosystem (Oddpool, Predly, aarora4/Awesome-Prediction-Market-Tools). Terminal figures are illustrative. Prepared as a product teardown; not financial advice.</p>
+  </footer>
+</div>
+
+<script>
+  // Tick-candle micro-chart — a small generative candlestick series grounding the "terminal" concept.
+  (function () {
+    var c = document.getElementById('chart');
+    if (!c) return;
+    var ctx = c.getContext('2d');
+    var W = c.width, H = c.height;
+    function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+    function draw() {
+      var up = css('--up'), down = css('--down'), hair = css('--hair'), faint = css('--ink-faint'), amber = css('--amber');
+      ctx.clearRect(0,0,W,H);
+      // faint grid
+      ctx.strokeStyle = hair; ctx.globalAlpha = .5; ctx.lineWidth = 1;
+      for (var g=1; g<5; g++){ var y=H*g/5; ctx.beginPath(); ctx.moveTo(0,y+.5); ctx.lineTo(W,y+.5); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+
+      // seeded tick candles trending up with a pullback
+      var seed = 7;
+      function rnd(){ seed = (seed*9301+49297)%233280; return seed/233280; }
+      var n = 46, pad = 8, cw = (W - pad*2)/n, price = 0.44, series = [];
+      for (var i=0;i<n;i++){
+        var drift = (i/n)*0.22 - (i>32 ? (i-32)*0.012 : 0);
+        var o = price;
+        var mv = (rnd()-0.45)*0.03 + 0.006;
+        price = Math.max(0.05, Math.min(0.95, o + mv + drift*0.02));
+        var hi = Math.max(o,price) + rnd()*0.02;
+        var lo = Math.min(o,price) - rnd()*0.02;
+        series.push({o:o,c:price,h:hi,l:lo});
+      }
+      var min=1,max=0;
+      series.forEach(function(s){ min=Math.min(min,s.l); max=Math.max(max,s.h); });
+      var range = max-min || 1;
+      function Y(v){ return H - pad - ((v-min)/range)*(H - pad*2); }
+
+      series.forEach(function(s,i){
+        var x = pad + i*cw + cw/2;
+        var isUp = s.c >= s.o;
+        ctx.strokeStyle = isUp ? up : down; ctx.fillStyle = isUp ? up : down;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x+.5, Y(s.h)); ctx.lineTo(x+.5, Y(s.l)); ctx.stroke();
+        var bw = Math.max(2, cw*0.62);
+        var yo = Y(s.o), yc = Y(s.c);
+        ctx.fillRect(x - bw/2, Math.min(yo,yc), bw, Math.max(1.5, Math.abs(yc-yo)));
+      });
+      // last-price marker
+      var last = series[series.length-1];
+      ctx.strokeStyle = amber; ctx.globalAlpha=.7; ctx.setLineDash([3,3]);
+      var ly = Y(last.c); ctx.beginPath(); ctx.moveTo(0,ly+.5); ctx.lineTo(W,ly+.5); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+    }
+    draw();
+    // redraw on theme flip
+    var mo = new MutationObserver(draw);
+    mo.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+    if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  })();
+</script>
