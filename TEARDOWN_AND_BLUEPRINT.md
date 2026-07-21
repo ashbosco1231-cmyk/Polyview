@@ -1,6 +1,6 @@
-# Polyview — TruthTick Terminal Teardown & Product Blueprint
+# Sharpline — TruthTick Terminal Teardown & Product Blueprint
 
-*A competitive teardown of [truthtickterminal.com](https://truthtickterminal.com) and a plan to do it better.*
+*A competitive teardown of [truthtickterminal.com](https://truthtickterminal.com) and a plan to do it better. The product this blueprint proposes is **Sharpline**.*
 
 ---
 
@@ -108,7 +108,7 @@ Non-custodial at every tier — **never hold user funds.**
 | **Edgewire** | "Edge" (the trader's edge) + "wire" (a live feed). |
 | **Vane** | Weathervane — reads which way the market is turning. Short, modern, brandable. |
 
-*(The repo is currently named `Polyview`, which is fine as a working title but is Polymarket-specific — it undercuts the multi-venue strategy. Prefer a platform-agnostic name.)*
+*(Adopted: **Sharpline**. The GitHub repo keeps its original `Polyview` name — a Polymarket-specific working title — but the product is Sharpline everywhere it counts.)*
 
 ---
 
