@@ -13,8 +13,12 @@ the [blueprint](./TEARDOWN_AND_BLUEPRINT.md#5-a-better-name).)
   update in real time over a push WebSocket. Run `npm run serve` and open
   `http://localhost:3000`.
 - **Phase 2 (multi-venue)** — **Kalshi** alongside Polymarket, behind the same
-  store, types, and live hub. Filter the watchlist by venue; the cross-venue
-  arbitrage / consensus view is the next build on top of this.
+  store, types, and live hub. Filter the watchlist by venue.
+- **Phase 3 (cross-venue)** — the **Cross-Venue** view: the same real-world
+  question on both venues, side by side, with spread, consensus, and a
+  directional arbitrage edge. Matches are similarity-ranked *candidates* with a
+  confidence score — never presented as confirmed arb, because the two venues
+  word the same event completely differently.
 
 > Full competitive teardown, strategy, and naming rationale:
 > [`TEARDOWN_AND_BLUEPRINT.md`](./TEARDOWN_AND_BLUEPRINT.md).
@@ -110,6 +114,7 @@ npm run build     # type-check + emit to dist/
 | `GET /api/book/:tokenId` | latest order-book snapshot |
 | `GET /api/candles/:tokenId?type=tick&ticks=50` | tick candles (N trades/candle) |
 | `GET /api/candles/:tokenId?type=time&interval=1m` | time candles (`1m,5m,15m,1h,1d`) |
+| `GET /api/cross-venue?minConfidence=0.3` | cross-venue candidate matches + spread/consensus/arb |
 
 Candles include OHLCV plus `buyVolume` / `sellVolume` / `imbalance` — the
 orderflow signal behind footprint charts.
@@ -125,13 +130,16 @@ WebSocket schemas (`book`, `price_change`, `last_trade_price`) and Kalshi's
 
 ## What's deliberately not here yet
 
-Phases 0–2 are the foundation, the live terminal, and multi-venue. Next, in order:
+Phases 0–3 are the foundation, the live terminal, multi-venue, and cross-venue.
+Next, in order:
 
-1. **Cross-venue view** — now that both venues share one store, surface the same
-   real-world question across Polymarket and Kalshi side by side: consensus odds
-   and an arbitrage finder. This is the thing no single-venue tool can do.
-2. **Materialised candle cache** — reconstructing from raw trades per request is
-   fine now; precompute once markets get deep.
+1. **Candidate-level match precision** — the current matcher pairs on title
+   similarity, so a binary "Will Rodri win the Ballon d'Or?" can pair with a
+   multi-outcome "Who will win the Ballon d'Or?" whose price is for a different
+   candidate. Match candidate *names* inside multi-outcome markets so the arb
+   figures are exact, not indicative.
+2. **Book-based arb** — compute the edge from executable best bid/ask and model
+   each venue's fees, instead of last-trade prices.
 3. **Orderflow / footprint chart** — the buy/sell split is already stored per
    candle; render it as a proper footprint.
 4. **Validated backtesting** (modeled fills, fees, walk-forward) and the market-wide scanner.

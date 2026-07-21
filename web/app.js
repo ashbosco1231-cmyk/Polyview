@@ -291,6 +291,71 @@ $("interval-tabs").addEventListener("click", (e) => {
   drawChart(); updateHeader();
 });
 
+// ---------- view toggle: Terminal <-> Cross-Venue ----------
+$("nav").addEventListener("click", (e) => {
+  const btn = e.target.closest(".nav__tab"); if (!btn) return;
+  document.querySelectorAll(".nav__tab").forEach((t) => t.classList.remove("is-active"));
+  btn.classList.add("is-active");
+  const cross = btn.dataset.view === "cross";
+  document.querySelector(".grid").hidden = cross;
+  $("crossvenue").hidden = !cross;
+  if (cross) loadCrossVenue();
+});
+
+async function loadCrossVenue() {
+  const body = $("cv-body");
+  const empty = $("cv-empty");
+  try {
+    const data = await api("/api/cross-venue?minConfidence=0.25&limit=60");
+    $("cv-stats").innerHTML =
+      `<b>${data.matches.length}</b> candidate matches<br>` +
+      `${data.polymarketMarkets} Polymarket · ${data.kalshiMarkets} Kalshi markets`;
+    if (!data.matches.length) {
+      body.innerHTML = "";
+      empty.hidden = false; empty.classList.add("show");
+      empty.textContent = "No cross-venue candidates right now — the two venues aren't listing overlapping questions at the moment. As shared markets (Fed decisions, crypto, elections) trade on both, they'll appear here automatically.";
+      return;
+    }
+    empty.hidden = true; empty.classList.remove("show");
+    body.innerHTML = data.matches.map(renderMatchRow).join("");
+  } catch (e) {
+    empty.hidden = false; empty.classList.add("show");
+    empty.textContent = "Couldn't load cross-venue matches.";
+  }
+}
+
+function confClass(c) { return c >= 0.6 ? "cv-conf--hi" : c >= 0.4 ? "cv-conf--mid" : ""; }
+const ARB_DIR = { "buy-yes-polymarket": "Buy YES · Polymarket", "buy-yes-kalshi": "Buy YES · Kalshi" };
+
+function priceCell(side) {
+  const px = side.yes != null ? cents(side.yes) + "¢" : "—";
+  return `<div class="cv-venue-cell"><span class="px">${px}</span><span class="q">${escapeHtml(side.question)}</span></div>`;
+}
+
+function renderMatchRow(m) {
+  const hasArb = m.arbDirection && m.arbDirection !== "none";
+  const spreadTxt = m.spread == null ? "—" : `${m.spread >= 0 ? "+" : ""}${(m.spread * 100).toFixed(1)}¢`;
+  const spreadCls = m.spread == null ? "muted" : m.spread >= 0 ? "pos" : "neg";
+  const consTxt = m.consensus == null ? "—" : cents(m.consensus) + "¢";
+  const conf = Math.round(m.confidence * 100);
+  const tokens = m.sharedTokens.slice(0, 5).join(" · ");
+  const arbCell = hasArb
+    ? `<span class="cv-arb__edge">${(m.arbEdge * 100).toFixed(1)}¢</span><span class="cv-arb__dir">${ARB_DIR[m.arbDirection] || ""}</span>`
+    : `<span class="cv-arb--none">—</span>`;
+  return `<tr class="${hasArb ? "has-arb" : ""}">` +
+    `<td><div class="cv-match__q">${escapeHtml(m.label)}</div>` +
+      `<div class="cv-match__meta">` +
+        `<span class="cv-conf ${confClass(m.confidence)}"><span class="cv-conf__bar"><span class="cv-conf__fill" style="width:${conf}%"></span></span>${conf}%</span>` +
+        `<span class="cv-tokens">${escapeHtml(tokens)}</span>` +
+      `</div></td>` +
+    `<td>${priceCell(m.polymarket)}</td>` +
+    `<td>${priceCell(m.kalshi)}</td>` +
+    `<td class="cv-num ${spreadCls}">${spreadTxt}</td>` +
+    `<td class="cv-num">${consTxt}</td>` +
+    `<td class="cv-arb">${arbCell}</td>` +
+    `</tr>`;
+}
+
 $("venue-filter").addEventListener("click", (e) => {
   const btn = e.target.closest(".vtab"); if (!btn) return;
   document.querySelectorAll(".vtab").forEach((t) => t.classList.remove("is-active"));

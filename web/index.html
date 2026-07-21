@@ -13,6 +13,10 @@
       <span class="brand__name">Sharpline</span>
       <span class="brand__tag">prediction-market terminal</span>
     </div>
+    <nav class="nav" id="nav">
+      <button data-view="terminal" class="nav__tab is-active">Terminal</button>
+      <button data-view="cross" class="nav__tab">Cross-Venue</button>
+    </nav>
     <div class="status">
       <span class="status__venue">POLYMARKET + KALSHI</span>
       <span class="status__dot" id="conn-dot" data-state="connecting"></span>
@@ -74,6 +78,33 @@
       <div class="tape" id="tape"></div>
     </aside>
   </main>
+
+  <!-- Cross-venue view -->
+  <section class="crossvenue" id="crossvenue" hidden>
+    <div class="cv__head">
+      <div>
+        <h2>Cross-Venue</h2>
+        <p class="cv__sub">The same question on Polymarket and Kalshi, side by side. Matches are similarity-ranked candidates — confirm before trading. Arb edge is gross of fees and slippage.</p>
+      </div>
+      <div class="cv__stats" id="cv-stats"></div>
+    </div>
+    <div class="cv__table-wrap">
+      <table class="cv__table">
+        <thead>
+          <tr>
+            <th class="cv-c-match">Match</th>
+            <th class="cv-c-num">Polymarket</th>
+            <th class="cv-c-num">Kalshi</th>
+            <th class="cv-c-num">Spread</th>
+            <th class="cv-c-num">Consensus</th>
+            <th class="cv-c-arb">Edge</th>
+          </tr>
+        </thead>
+        <tbody id="cv-body"></tbody>
+      </table>
+      <div class="cv__empty" id="cv-empty" hidden></div>
+    </div>
+  </section>
 
   <script src="app.js"></script>
 </body>

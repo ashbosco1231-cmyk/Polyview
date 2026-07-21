@@ -5,6 +5,7 @@
 
 import express from "express";
 import { buildTickCandles, buildTimeCandles, orderFlowImbalance } from "./aggregate/candles.js";
+import { findMatches } from "./crossvenue.js";
 import type { Store } from "./store/store.js";
 
 const TIME_INTERVALS: Record<string, number> = {
@@ -26,6 +27,21 @@ export function createServer(store: Store) {
     const limit = clampInt(req.query.limit, 100, 1, 500);
     const venue = req.query.venue === "polymarket" || req.query.venue === "kalshi" ? req.query.venue : undefined;
     res.json(store.listMarkets({ limit, activeOnly: true, venue }));
+  });
+
+  // Cross-venue candidate matches with spread / consensus / arb edge.
+  app.get("/api/cross-venue", (req, res) => {
+    const minConfidence = clampFloat(req.query.minConfidence, 0.3, 0, 1);
+    const limit = clampInt(req.query.limit, 40, 1, 200);
+    const polymarket = store.listMarkets({ venue: "polymarket", activeOnly: true, limit: 500 });
+    const kalshi = store.listMarkets({ venue: "kalshi", activeOnly: true, limit: 500 });
+    const matches = findMatches(polymarket, kalshi, { minConfidence, limit });
+    res.json({
+      polymarketMarkets: polymarket.length,
+      kalshiMarkets: kalshi.length,
+      matches,
+      note: "Matches are algorithmic candidates ranked by title similarity; confirm before trading. Arb edge is gross of fees and slippage.",
+    });
   });
 
   app.get("/api/trades/:tokenId", (req, res) => {
@@ -78,6 +94,12 @@ function clampInt(v: unknown, dflt: number, min: number, max: number): number {
   const n = Number(v);
   if (!Number.isFinite(n)) return dflt;
   return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+function clampFloat(v: unknown, dflt: number, min: number, max: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(max, Math.max(min, n));
 }
 
 function round(n: number, dp: number): number {

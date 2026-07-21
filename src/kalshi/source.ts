@@ -6,7 +6,7 @@
 // Polymarket recorder produces. Books for recently-active tickers are refreshed
 // on a slower cadence so whatever a user is watching stays current.
 
-import { fetchMarket, fetchOrderbook, fetchRecentTrades } from "./rest.js";
+import { fetchMarket, fetchOpenMarkets, fetchOrderbook, fetchRecentTrades } from "./rest.js";
 import { LiveEmitter, type LiveListener, type MarketDataSource } from "../source.js";
 import type { Store } from "../store/store.js";
 import type { Trade } from "../types.js";
@@ -18,6 +18,8 @@ export interface KalshiOptions {
   bookPollMs?: number;
   /** Max hot tickers to keep books fresh for. */
   hotTickers?: number;
+  /** How many open markets to seed the catalogue with at startup. */
+  catalogueSize?: number;
   log?: (msg: string) => void;
 }
 
@@ -46,6 +48,16 @@ export class KalshiSource implements MarketDataSource {
 
   async start(): Promise<void> {
     this.running = true;
+    // Seed the catalogue so the watchlist and cross-venue matcher have breadth
+    // immediately, not just markets that trade during the session.
+    try {
+      const seed = await fetchOpenMarkets(this.opts.catalogueSize ?? 800);
+      this.store.upsertMarkets(seed);
+      for (const m of seed) this.knownMarkets.add(m.market);
+      this.log(`seeded ${seed.length} open markets`);
+    } catch (e) {
+      this.log(`catalogue seed failed: ${(e as Error).message}`);
+    }
     this.log("polling public trades feed…");
     await this.pollTrades();
     this.tradeTimer = setInterval(() => this.pollTrades(), this.opts.tradePollMs ?? 2_000);

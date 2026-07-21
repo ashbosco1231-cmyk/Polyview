@@ -12,8 +12,10 @@ import type { Trade } from "./types.js";
 export type { LiveEvent, LiveListener } from "./source.js";
 
 export interface RecorderOptions {
-  /** How many top markets (by 24h volume) to record. */
+  /** How many top markets (by 24h volume) to record a live WS feed for. */
   marketLimit?: number;
+  /** How many markets to catalogue (>= marketLimit) for the watchlist / matcher. */
+  catalogueSize?: number;
   /** Flush buffered trades to the store at most this often (ms). */
   flushIntervalMs?: number;
   log?: (msg: string) => void;
@@ -45,12 +47,16 @@ export class Recorder implements MarketDataSource {
 
   async start(): Promise<void> {
     const limit = this.opts.marketLimit ?? 50;
-    this.log(`fetching top ${limit} markets…`);
-    const markets = await fetchTopMarkets(limit);
+    // Catalogue more markets than we record trades for, so the watchlist and the
+    // cross-venue matcher see breadth; only the busiest slice gets a live WS feed.
+    const catalogueSize = Math.max(limit, this.opts.catalogueSize ?? 100);
+    this.log(`fetching top ${catalogueSize} markets…`);
+    const markets = await fetchTopMarkets(catalogueSize);
     this.store.upsertMarkets(markets);
 
-    const tokenIds = markets.flatMap((m) => m.tokenIds);
-    this.log(`recording ${tokenIds.length} tokens across ${markets.length} markets`);
+    const recorded = markets.slice(0, limit);
+    const tokenIds = recorded.flatMap((m) => m.tokenIds);
+    this.log(`recording ${tokenIds.length} tokens across ${recorded.length} of ${markets.length} markets`);
 
     this.feed = new PolymarketMarketFeed(tokenIds, {
       onTrade: (t) => {

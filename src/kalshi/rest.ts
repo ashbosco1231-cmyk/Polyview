@@ -65,26 +65,50 @@ export async function fetchOrderbook(ticker: string): Promise<BookSnapshot> {
   return { venue: "kalshi", tokenId: ticker, market: ticker, ts: Date.now(), bids, asks };
 }
 
+function toMarketMeta(m: any): MarketMeta {
+  return {
+    venue: "kalshi",
+    market: String(m.ticker),
+    question: cleanTitle(m.title, m.yes_sub_title, String(m.ticker)),
+    slug: String(m.ticker),
+    category: m.category ?? null,
+    tokenIds: [String(m.ticker)],
+    active: m.status === "active",
+    closed: m.status === "closed" || m.status === "settled",
+    volume24hr: num(m.volume_24h_fp) || null,
+    lastPrice: num(m.last_price_dollars) || null,
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * A page of currently-open markets, for seeding the catalogue at startup so the
+ * watchlist and cross-venue matcher have something to work with immediately
+ * (rather than only markets that happen to trade during the session).
+ */
+export async function fetchOpenMarkets(limit = 500): Promise<MarketMeta[]> {
+  const out: MarketMeta[] = [];
+  let cursor = "";
+  while (out.length < limit) {
+    const page = Math.min(1000, limit - out.length);
+    const url = `${BASE}/markets?limit=${page}&status=open${cursor ? `&cursor=${cursor}` : ""}`;
+    const data = await getJson(url);
+    const markets = (data?.markets ?? []) as any[];
+    if (markets.length === 0) break;
+    out.push(...markets.map(toMarketMeta));
+    cursor = data?.cursor ?? "";
+    if (!cursor) break;
+  }
+  return out;
+}
+
 /** Market metadata for one ticker. */
 export async function fetchMarket(ticker: string): Promise<MarketMeta | null> {
   try {
     const data = await getJson(`${BASE}/markets/${encodeURIComponent(ticker)}`);
     const m = data?.market;
     if (!m) return null;
-    const question = cleanTitle(m.title, m.yes_sub_title, ticker);
-    return {
-      venue: "kalshi",
-      market: String(m.ticker),
-      question,
-      slug: String(m.ticker),
-      category: m.category ?? null,
-      tokenIds: [String(m.ticker)],
-      active: m.status === "active",
-      closed: m.status === "closed" || m.status === "settled",
-      volume24hr: num(m.volume_24h_fp) || null,
-      lastPrice: num(m.last_price_dollars) || null,
-      updatedAt: Date.now(),
-    };
+    return toMarketMeta(m);
   } catch {
     return null;
   }
