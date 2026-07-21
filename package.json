@@ -1,0 +1,30 @@
+{
+  "name": "polyview",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A clean, multi-venue analytics terminal for prediction markets. Phase 0: the Polymarket live-data recorder and tick-candle engine.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "record": "tsx src/cli/record.ts",
+    "serve": "tsx src/cli/serve.ts",
+    "dev": "tsx watch src/cli/serve.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
