@@ -68,8 +68,27 @@ body {
 .panel__head--tape { border-top: 1px solid var(--hair); }
 .panel__hint { color: var(--ink-faint); text-transform: none; letter-spacing: .02em; font-family: var(--mono); }
 
+/* Venue filter */
+.venue-filter { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--hair-soft);
+  background: var(--panel); flex: 0 0 auto; }
+.vtab { flex: 1; font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft);
+  background: var(--panel-2); border: 1px solid var(--hair); border-radius: 5px; padding: 5px 4px;
+  cursor: pointer; letter-spacing: .02em; }
+.vtab:hover { color: var(--ink); }
+.vtab.is-active { color: var(--bg); background: var(--ink-soft); border-color: var(--ink-soft); font-weight: 600; }
+.vtab:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+/* Venue badge */
+.venue-badge { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .08em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px;
+  font-weight: 600; vertical-align: middle; }
+.venue-badge[data-v="polymarket"] { background: color-mix(in srgb, #6c5ce7 24%, transparent); color: #a99cf5; }
+.venue-badge[data-v="kalshi"] { background: color-mix(in srgb, #00b894 22%, transparent); color: #4fd6b3; }
+.chart__price .venue-badge { margin-left: 10px; font-size: 10px; align-self: center; }
+
 /* Watchlist */
 .watchlist__rows { overflow-y: auto; flex: 1 1 auto; }
+.wl-row__badge { grid-row: 1; grid-column: 1; }
 .wl-row {
   display: grid; grid-template-columns: 1fr auto; gap: 4px 8px;
   padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--hair-soft);

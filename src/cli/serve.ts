@@ -11,6 +11,8 @@ import express from "express";
 import { createServer } from "../server.js";
 import { LiveHub } from "../live.js";
 import { Recorder } from "../recorder.js";
+import { KalshiSource } from "../kalshi/source.js";
+import type { MarketDataSource } from "../source.js";
 import { SqliteStore } from "../store/sqlite.js";
 
 const store = new SqliteStore(process.env.DB_PATH ?? "sharpline.db");
@@ -25,20 +27,30 @@ app.use(express.static(path.resolve(here, "../../web")));
 const http = createHttpServer(app);
 const hub = new LiveHub(http);
 
-let recorder: Recorder | null = null;
+// Both venues feed the same store and the same live hub. Toggle each with an
+// env flag; default is both on.
+const sources: MarketDataSource[] = [];
 if (process.env.RECORD !== "0") {
-  recorder = new Recorder(store, { marketLimit: Number(process.env.MARKET_LIMIT ?? 50) });
-  recorder.onLive((ev) => hub.broadcast(ev));
-  await recorder.start();
+  if (process.env.POLYMARKET !== "0") {
+    sources.push(new Recorder(store, { marketLimit: Number(process.env.MARKET_LIMIT ?? 50) }));
+  }
+  if (process.env.KALSHI !== "0") {
+    sources.push(new KalshiSource(store));
+  }
+}
+for (const src of sources) {
+  src.onLive((ev) => hub.broadcast(ev));
+  await src.start();
 }
 
 http.listen(port, () => {
   console.log(`[serve] Sharpline terminal on http://localhost:${port}`);
+  console.log(`[serve] venues: ${sources.map((s) => s.name).join(", ") || "none (RECORD=0)"}`);
   console.log(`[serve] API under /api, live push at ws://localhost:${port}/live`);
 });
 
 function shutdown(): void {
-  recorder?.stop();
+  for (const src of sources) src.stop();
   http.close();
   store.close();
   process.exit(0);

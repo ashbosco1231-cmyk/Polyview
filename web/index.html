@@ -14,7 +14,7 @@
       <span class="brand__tag">prediction-market terminal</span>
     </div>
     <div class="status">
-      <span class="status__venue">POLYMARKET</span>
+      <span class="status__venue">POLYMARKET + KALSHI</span>
       <span class="status__dot" id="conn-dot" data-state="connecting"></span>
       <span class="status__label" id="conn-label">connecting…</span>
     </div>
@@ -26,6 +26,11 @@
       <div class="panel__head">
         <span>Markets</span>
         <span class="panel__hint" id="market-count"></span>
+      </div>
+      <div class="venue-filter" id="venue-filter">
+        <button data-venue="" class="vtab is-active">All</button>
+        <button data-venue="polymarket" class="vtab">Polymarket</button>
+        <button data-venue="kalshi" class="vtab">Kalshi</button>
       </div>
       <div class="watchlist__rows" id="watchlist"></div>
     </aside>
@@ -39,6 +44,7 @@
             <span class="price" id="mkt-price">—</span>
             <span class="price__unit">¢</span>
             <span class="chg" id="mkt-chg"></span>
+            <span class="venue-badge" id="mkt-venue" hidden></span>
           </div>
         </div>
         <div class="chart__controls" id="interval-tabs">

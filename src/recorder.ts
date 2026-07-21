@@ -4,15 +4,12 @@
 
 import { fetchTopMarkets } from "./polymarket/rest.js";
 import { PolymarketMarketFeed } from "./polymarket/ws.js";
+import { LiveEmitter, type LiveEvent, type LiveListener, type MarketDataSource } from "./source.js";
 import type { Store } from "./store/store.js";
-import type { BookSnapshot, Trade } from "./types.js";
+import type { Trade } from "./types.js";
 
-/** A real-time event for anything downstream that wants the feed as it happens. */
-export type LiveEvent =
-  | { kind: "trade"; trade: Trade }
-  | { kind: "book"; book: BookSnapshot };
-
-export type LiveListener = (ev: LiveEvent) => void;
+// Re-exported for existing importers.
+export type { LiveEvent, LiveListener } from "./source.js";
 
 export interface RecorderOptions {
   /** How many top markets (by 24h volume) to record. */
@@ -22,13 +19,14 @@ export interface RecorderOptions {
   log?: (msg: string) => void;
 }
 
-export class Recorder {
+export class Recorder implements MarketDataSource {
+  readonly name = "polymarket";
   private feed: PolymarketMarketFeed | null = null;
   private buffer: Trade[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private written = 0;
   private readonly log: (msg: string) => void;
-  private readonly listeners = new Set<LiveListener>();
+  private readonly emitter = new LiveEmitter();
 
   constructor(
     private readonly store: Store,
@@ -37,20 +35,12 @@ export class Recorder {
     this.log = opts.log ?? ((m) => console.log(`[recorder] ${m}`));
   }
 
-  /** Subscribe to the live feed. Returns an unsubscribe function. */
   onLive(listener: LiveListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.emitter.onLive(listener);
   }
 
   private emit(ev: LiveEvent): void {
-    for (const l of this.listeners) {
-      try {
-        l(ev);
-      } catch {
-        /* a broken listener must never take down ingestion */
-      }
-    }
+    this.emitter.emit(ev);
   }
 
   async start(): Promise<void> {

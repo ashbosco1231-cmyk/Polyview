@@ -166,14 +166,17 @@ export class SqliteStore implements Store {
     tx(markets);
   }
 
-  listMarkets(opts: { limit?: number; activeOnly?: boolean } = {}): MarketMeta[] {
-    const where = opts.activeOnly ? "WHERE active = 1 AND closed = 0" : "";
+  listMarkets(opts: { limit?: number; activeOnly?: boolean; venue?: Venue } = {}): MarketMeta[] {
+    const clauses: string[] = [];
+    if (opts.activeOnly) clauses.push("active = 1 AND closed = 0");
+    if (opts.venue) clauses.push("venue = @venue");
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.db
       .prepare(
         `SELECT * FROM markets ${where}
-         ORDER BY volume24hr DESC NULLS LAST LIMIT ?`,
+         ORDER BY volume24hr DESC NULLS LAST, updated_at DESC LIMIT @limit`,
       )
-      .all(opts.limit ?? 100) as any[];
+      .all({ venue: opts.venue, limit: opts.limit ?? 100 }) as any[];
     return rows.map(rowToMarket);
   }
 

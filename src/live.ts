@@ -6,7 +6,7 @@
 
 import type { Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { LiveEvent } from "./recorder.js";
+import type { LiveEvent } from "./source.js";
 
 interface Client {
   socket: WebSocket;

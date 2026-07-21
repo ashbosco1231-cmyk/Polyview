@@ -7,9 +7,12 @@ const state = {
   tokenId: null,       // active outcome token
   trades: [],          // rolling trade history for the active token (ascending)
   mode: { type: "tick", n: 50 },
+  venue: "",            // "" = all, "polymarket", "kalshi"
   ws: null,
   wsReady: false,
 };
+
+const VENUE_LABEL = { polymarket: "PM", kalshi: "Kalshi" };
 
 const MAX_TRADES = 4000; // cap client memory; plenty for any on-screen chart
 
@@ -204,6 +207,10 @@ async function selectMarket(m) {
   state.tokenId = m.tokenIds[0];
   document.querySelectorAll(".wl-row").forEach((r) => r.classList.toggle("is-active", r.dataset.market === m.market));
   $("mkt-question").textContent = m.question;
+  const badge = $("mkt-venue");
+  badge.textContent = VENUE_LABEL[m.venue] || m.venue;
+  badge.dataset.v = m.venue;
+  badge.hidden = false;
   state.trades = [];
   $("tape").innerHTML = "";
 
@@ -253,17 +260,25 @@ function onLiveTrade(t) {
 // ---------- boot ----------
 function renderWatchlist() {
   const el = $("watchlist");
-  el.innerHTML = state.markets.map((m) =>
-    `<div class="wl-row" data-market="${m.market}">` +
+  el.innerHTML = state.markets.map((m, i) =>
+    `<div class="wl-row" data-idx="${i}" data-market="${escapeHtml(m.market)}">` +
     `<div class="wl-row__q">${escapeHtml(m.question)}</div>` +
     `<div class="wl-row__px">${m.lastPrice != null ? cents(m.lastPrice) + "¢" : "—"}</div>` +
-    `<div class="wl-row__vol">${m.volume24hr ? "$" + fmtSize(m.volume24hr) + " 24h" : ""}</div>` +
+    `<div class="wl-row__vol">` +
+      `<span class="venue-badge" data-v="${m.venue}">${VENUE_LABEL[m.venue] || m.venue}</span> ` +
+      `${m.volume24hr ? "$" + fmtSize(m.volume24hr) + " 24h" : ""}</div>` +
     `</div>`).join("");
   el.querySelectorAll(".wl-row").forEach((row) => {
-    const m = state.markets.find((x) => x.market === row.dataset.market);
-    row.addEventListener("click", () => selectMarket(m));
+    row.addEventListener("click", () => selectMarket(state.markets[Number(row.dataset.idx)]));
   });
   $("market-count").textContent = `${state.markets.length}`;
+}
+
+async function loadMarkets(selectFirst) {
+  const q = state.venue ? `&venue=${state.venue}` : "";
+  state.markets = await api(`/api/markets?limit=120${q}`);
+  renderWatchlist();
+  if (selectFirst && state.markets.length) selectMarket(state.markets[0]);
 }
 function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
@@ -276,17 +291,32 @@ $("interval-tabs").addEventListener("click", (e) => {
   drawChart(); updateHeader();
 });
 
+$("venue-filter").addEventListener("click", (e) => {
+  const btn = e.target.closest(".vtab"); if (!btn) return;
+  document.querySelectorAll(".vtab").forEach((t) => t.classList.remove("is-active"));
+  btn.classList.add("is-active");
+  state.venue = btn.dataset.venue;
+  loadMarkets(false).catch(() => {});
+});
+
 window.addEventListener("resize", resizeCanvas);
 
 async function boot() {
   connectWs();
   try {
-    state.markets = await api("/api/markets?limit=80");
-    renderWatchlist();
-    if (state.markets.length) selectMarket(state.markets[0]);
+    await loadMarkets(true);
   } catch (e) {
     setConn("down", "api error");
   }
   resizeCanvas();
+  // The Kalshi catalogue fills in as markets trade; refresh the list periodically
+  // without disturbing the current selection.
+  setInterval(() => {
+    const active = state.selected?.market;
+    loadMarkets(false).then(() => {
+      if (active) document.querySelectorAll(".wl-row").forEach((r) =>
+        r.classList.toggle("is-active", r.dataset.market === active));
+    }).catch(() => {});
+  }, 20000);
 }
 boot();

@@ -6,7 +6,7 @@
 // Everything goes through the `Store` interface so the same recorder and API
 // can later point at ClickHouse / TimescaleDB without changing callers.
 
-import type { BookSnapshot, MarketMeta, Trade } from "../types.js";
+import type { BookSnapshot, MarketMeta, Trade, Venue } from "../types.js";
 
 export interface TradeQuery {
   tokenId: string;
@@ -30,7 +30,7 @@ export interface Store {
   /** Upsert market catalogue entries. */
   upsertMarkets(markets: MarketMeta[]): void;
   /** List catalogue entries, most 24h volume first. */
-  listMarkets(opts?: { limit?: number; activeOnly?: boolean }): MarketMeta[];
+  listMarkets(opts?: { limit?: number; activeOnly?: boolean; venue?: Venue }): MarketMeta[];
   /** Total trades recorded (for status / proof of capture). */
   countTrades(): number;
   close(): void;

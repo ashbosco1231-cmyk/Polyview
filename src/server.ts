@@ -24,7 +24,8 @@ export function createServer(store: Store) {
 
   app.get("/api/markets", (req, res) => {
     const limit = clampInt(req.query.limit, 100, 1, 500);
-    res.json(store.listMarkets({ limit, activeOnly: true }));
+    const venue = req.query.venue === "polymarket" || req.query.venue === "kalshi" ? req.query.venue : undefined;
+    res.json(store.listMarkets({ limit, activeOnly: true, venue }));
   });
 
   app.get("/api/trades/:tokenId", (req, res) => {
