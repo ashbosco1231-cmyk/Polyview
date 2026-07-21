@@ -1,8 +1,8 @@
 {
-  "name": "polyview",
+  "name": "sharpline",
   "version": "0.0.1",
   "private": true,
-  "description": "A clean, multi-venue analytics terminal for prediction markets. Phase 0: the Polymarket live-data recorder and tick-candle engine.",
+  "description": "Sharpline — a clean, multi-venue analytics terminal for prediction markets.",
   "type": "module",
   "engines": {
     "node": ">=20"

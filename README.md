@@ -1,7 +1,12 @@
-# Polyview
+# Sharpline
 
 A clean, multi-venue analytics terminal for prediction markets — the version of
-[TruthTick Terminal](./TEARDOWN_AND_BLUEPRINT.md) worth building.
+[TruthTick Terminal](./TEARDOWN_AND_BLUEPRINT.md) worth building. (A *sharp* is a
+professional bettor; a *line* is both the odds and the chart. Naming rationale in
+the [blueprint](./TEARDOWN_AND_BLUEPRINT.md#5-a-better-name).)
+
+> The GitHub repo is still named `Polyview` — the original working title. The
+> product is **Sharpline**.
 
 - **Phase 0** — the live-data recorder + tick-candle reconstruction engine.
 - **Phase 1** — the terminal UI: a live chart, order book, and trade tape that
@@ -61,7 +66,7 @@ receives that token's prints the instant the recorder sees them.
 ```bash
 npm install
 
-# Record the 50 busiest markets into polyview.db (Ctrl-C to stop)
+# Record the 50 busiest markets into sharpline.db (Ctrl-C to stop)
 npm run record
 
 # Stop automatically after 30s, into a scratch db
@@ -109,4 +114,4 @@ Phases 0–1 are the foundation and the live terminal. Next, in order:
 4. **Validated backtesting** (modeled fills, fees, walk-forward) and the market-wide scanner.
 5. **Non-custodial execution** (bring-your-own key).
 
-Non-custodial throughout — Polyview never holds user funds.
+Non-custodial throughout — Sharpline never holds user funds.

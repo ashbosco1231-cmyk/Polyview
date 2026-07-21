@@ -1,13 +1,13 @@
 // Start the live recorder. Runs until Ctrl-C; prints a capture summary on exit.
 //
-//   npm run record                 # record top 50 markets into polyview.db
+//   npm run record                 # record top 50 markets into sharpline.db
 //   MARKET_LIMIT=100 npm run record
 //   RECORD_SECONDS=30 npm run record   # stop automatically after N seconds
 
 import { Recorder } from "../recorder.js";
 import { SqliteStore } from "../store/sqlite.js";
 
-const store = new SqliteStore(process.env.DB_PATH ?? "polyview.db");
+const store = new SqliteStore(process.env.DB_PATH ?? "sharpline.db");
 const recorder = new Recorder(store, {
   marketLimit: Number(process.env.MARKET_LIMIT ?? 50),
 });

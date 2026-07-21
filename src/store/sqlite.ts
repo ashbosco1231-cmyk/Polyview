@@ -14,7 +14,7 @@ export class SqliteStore implements Store {
   private putBookStmt!: Database.Statement;
   private upsertMarketStmt!: Database.Statement;
 
-  constructor(path = "polyview.db") {
+  constructor(path = "sharpline.db") {
     this.db = new Database(path);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("synchronous = NORMAL");

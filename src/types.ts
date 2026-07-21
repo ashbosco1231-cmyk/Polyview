@@ -1,4 +1,4 @@
-// Core domain types for Polyview.
+// Core domain types for Sharpline.
 //
 // These are venue-neutral on purpose: Polymarket is the first source, but the
 // same shapes are meant to hold Kalshi (and anything else) later. A `venue`

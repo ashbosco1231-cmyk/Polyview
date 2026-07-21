@@ -13,7 +13,7 @@ import { LiveHub } from "../live.js";
 import { Recorder } from "../recorder.js";
 import { SqliteStore } from "../store/sqlite.js";
 
-const store = new SqliteStore(process.env.DB_PATH ?? "polyview.db");
+const store = new SqliteStore(process.env.DB_PATH ?? "sharpline.db");
 const port = Number(process.env.PORT ?? 3000);
 
 const app = createServer(store);
@@ -33,7 +33,7 @@ if (process.env.RECORD !== "0") {
 }
 
 http.listen(port, () => {
-  console.log(`[serve] Polyview terminal on http://localhost:${port}`);
+  console.log(`[serve] Sharpline terminal on http://localhost:${port}`);
   console.log(`[serve] API under /api, live push at ws://localhost:${port}/live`);
 });
 

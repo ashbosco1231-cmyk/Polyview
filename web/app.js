@@ -1,4 +1,4 @@
-// Polyview terminal frontend. Vanilla JS, no build step.
+// Sharpline terminal frontend. Vanilla JS, no build step.
 // Talks only to our own API + /live socket — never to Polymarket directly.
 
 const state = {
