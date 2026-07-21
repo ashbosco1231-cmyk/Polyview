@@ -55,6 +55,8 @@ export interface MarketMeta {
   active: boolean;
   closed: boolean;
   volume24hr: number | null;
+  /** Last traded price of the primary (first) outcome token, 0..1. */
+  lastPrice: number | null;
   updatedAt: number;
 }
 

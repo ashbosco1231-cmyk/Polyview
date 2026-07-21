@@ -1,9 +1,12 @@
 # Polyview
 
 A clean, multi-venue analytics terminal for prediction markets — the version of
-[TruthTick Terminal](./TEARDOWN_AND_BLUEPRINT.md) worth building. This repo is
-**Phase 0**: the live-data recorder and the tick-candle reconstruction engine
-that everything else stands on.
+[TruthTick Terminal](./TEARDOWN_AND_BLUEPRINT.md) worth building.
+
+- **Phase 0** — the live-data recorder + tick-candle reconstruction engine.
+- **Phase 1** — the terminal UI: a live chart, order book, and trade tape that
+  update in real time over a push WebSocket. Run `npm run serve` and open
+  `http://localhost:3000`.
 
 > Full competitive teardown, strategy, and naming rationale:
 > [`TEARDOWN_AND_BLUEPRINT.md`](./TEARDOWN_AND_BLUEPRINT.md).
@@ -29,17 +32,29 @@ src/
   store/
     store.ts            storage interface (swap SQLite → ClickHouse later)
     sqlite.ts           SQLite implementation (WAL, dedup, the tick archive)
-  recorder.ts           wires the feed into the store
+  recorder.ts           wires the feed into the store + emits a live event bus
+  live.ts               push hub: fans trades/book to subscribed frontend clients
   server.ts             thin read API — the frontend never hits Polymarket directly
   cli/
     record.ts           run the recorder
-    serve.ts            run recorder + API together
+    serve.ts            run recorder + API + UI + live push together
+web/
+  index.html style.css app.js   the terminal UI (vanilla, no build step)
 test/
   candles.test.ts       OHLCV, tick grouping, and orderflow split
 ```
 
 Data flow: **Polymarket public WS → normalise → SQLite (trade archive) →
-on-demand candle reconstruction → JSON API → (future) clean UI.**
+on-demand candle reconstruction → JSON API + live push socket → terminal UI.**
+
+## The terminal
+
+`npm run serve` records live *and* serves the UI on `http://localhost:3000`:
+a watchlist of the busiest markets (with live prices), a canvas candlestick
+chart (tick or time candles, with a volume histogram and orderflow readout), a
+depth-laddered order book, and a live trade tape. Everything ticks in real time
+— the page holds one WebSocket, subscribes to the market you're viewing, and
+receives that token's prints the instant the recorder sees them.
 
 ## Run it
 
@@ -84,11 +99,13 @@ served correct tick candles, 1-minute candles, and a live order book (17 bids /
 
 ## What's deliberately not here yet
 
-Phase 0 is the foundation, not the product. Next, in order:
+Phases 0–1 are the foundation and the live terminal. Next, in order:
 
 1. **Kalshi source** behind the same `Store` / types → multi-venue + cross-venue arbitrage.
-2. **Materialised candle cache** + a push WebSocket to the frontend for live updates.
-3. **The clean UI** — chart, order book, orderflow, watchlists.
+2. **Materialised candle cache** — reconstructing from raw trades per request is
+   fine now; precompute once markets get deep.
+3. **Orderflow / footprint chart** — the buy/sell split is already stored per
+   candle; render it as a proper footprint.
 4. **Validated backtesting** (modeled fills, fees, walk-forward) and the market-wide scanner.
 5. **Non-custodial execution** (bring-your-own key).
 

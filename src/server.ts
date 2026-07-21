@@ -27,6 +27,12 @@ export function createServer(store: Store) {
     res.json(store.listMarkets({ limit, activeOnly: true }));
   });
 
+  app.get("/api/trades/:tokenId", (req, res) => {
+    const limit = clampInt(req.query.limit, 100, 1, 2000);
+    const trades = store.getTrades({ tokenId: req.params.tokenId, limit });
+    res.json(trades.slice().reverse()); // most recent first for a tape
+  });
+
   app.get("/api/book/:tokenId", (req, res) => {
     const book = store.getBook(req.params.tokenId);
     if (!book) return res.status(404).json({ error: "no book snapshot yet for this token" });

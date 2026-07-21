@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polyview — prediction market terminal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark">◆</span>
+      <span class="brand__name">Polyview</span>
+      <span class="brand__tag">prediction-market terminal</span>
+    </div>
+    <div class="status">
+      <span class="status__venue">POLYMARKET</span>
+      <span class="status__dot" id="conn-dot" data-state="connecting"></span>
+      <span class="status__label" id="conn-label">connecting…</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- Watchlist -->
+    <aside class="panel watchlist">
+      <div class="panel__head">
+        <span>Markets</span>
+        <span class="panel__hint" id="market-count"></span>
+      </div>
+      <div class="watchlist__rows" id="watchlist"></div>
+    </aside>
+
+    <!-- Chart -->
+    <section class="panel chart">
+      <div class="chart__head">
+        <div class="chart__title">
+          <h1 id="mkt-question">Select a market</h1>
+          <div class="chart__price">
+            <span class="price" id="mkt-price">—</span>
+            <span class="price__unit">¢</span>
+            <span class="chg" id="mkt-chg"></span>
+          </div>
+        </div>
+        <div class="chart__controls" id="interval-tabs">
+          <button data-mode="tick:50" class="tab is-active">Tick 50</button>
+          <button data-mode="time:1m" class="tab">1m</button>
+          <button data-mode="time:5m" class="tab">5m</button>
+          <button data-mode="time:15m" class="tab">15m</button>
+          <button data-mode="time:1h" class="tab">1h</button>
+        </div>
+      </div>
+      <div class="chart__canvas-wrap">
+        <canvas id="chart-canvas"></canvas>
+        <div class="chart__empty" id="chart-empty">No trades recorded yet for this market — they'll appear live as they print.</div>
+      </div>
+      <div class="chart__foot" id="chart-foot"></div>
+    </section>
+
+    <!-- Book + tape -->
+    <aside class="panel side">
+      <div class="panel__head"><span>Order Book</span><span class="panel__hint" id="spread-hint"></span></div>
+      <div class="book" id="book">
+        <div class="book__col book__asks" id="book-asks"></div>
+        <div class="book__mid" id="book-mid">—</div>
+        <div class="book__col book__bids" id="book-bids"></div>
+      </div>
+      <div class="panel__head panel__head--tape"><span>Trades</span><span class="panel__hint">live</span></div>
+      <div class="tape" id="tape"></div>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

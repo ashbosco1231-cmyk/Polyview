@@ -5,7 +5,14 @@
 import { fetchTopMarkets } from "./polymarket/rest.js";
 import { PolymarketMarketFeed } from "./polymarket/ws.js";
 import type { Store } from "./store/store.js";
-import type { Trade } from "./types.js";
+import type { BookSnapshot, Trade } from "./types.js";
+
+/** A real-time event for anything downstream that wants the feed as it happens. */
+export type LiveEvent =
+  | { kind: "trade"; trade: Trade }
+  | { kind: "book"; book: BookSnapshot };
+
+export type LiveListener = (ev: LiveEvent) => void;
 
 export interface RecorderOptions {
   /** How many top markets (by 24h volume) to record. */
@@ -21,12 +28,29 @@ export class Recorder {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private written = 0;
   private readonly log: (msg: string) => void;
+  private readonly listeners = new Set<LiveListener>();
 
   constructor(
     private readonly store: Store,
     private readonly opts: RecorderOptions = {},
   ) {
     this.log = opts.log ?? ((m) => console.log(`[recorder] ${m}`));
+  }
+
+  /** Subscribe to the live feed. Returns an unsubscribe function. */
+  onLive(listener: LiveListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private emit(ev: LiveEvent): void {
+    for (const l of this.listeners) {
+      try {
+        l(ev);
+      } catch {
+        /* a broken listener must never take down ingestion */
+      }
+    }
   }
 
   async start(): Promise<void> {
@@ -39,8 +63,14 @@ export class Recorder {
     this.log(`recording ${tokenIds.length} tokens across ${markets.length} markets`);
 
     this.feed = new PolymarketMarketFeed(tokenIds, {
-      onTrade: (t) => this.buffer.push(t),
-      onBook: (b) => this.store.putBook(b),
+      onTrade: (t) => {
+        this.buffer.push(t); // durable archive, flushed in batches
+        this.emit({ kind: "trade", trade: t }); // live, immediate
+      },
+      onBook: (b) => {
+        this.store.putBook(b);
+        this.emit({ kind: "book", book: b });
+      },
       onStatus: (s) => this.log(s),
     });
     this.feed.start();

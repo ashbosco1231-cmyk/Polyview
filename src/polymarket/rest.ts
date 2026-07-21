@@ -37,6 +37,7 @@ export async function fetchTopMarkets(limit = 50): Promise<MarketMeta[]> {
     active: m.active ?? true,
     closed: m.closed ?? false,
     volume24hr: numeric(m.volume24hr),
+    lastPrice: parseLastPrice(m),
     updatedAt: now,
   }));
 }
@@ -58,6 +59,19 @@ function parseTokenIds(raw: unknown): string[] {
 function numeric(v: unknown): number | null {
   const n = typeof v === "string" ? Number(v) : (v as number);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Prefer explicit last trade price; fall back to the YES leg of outcomePrices. */
+function parseLastPrice(m: any): number | null {
+  const last = numeric(m.lastTradePrice);
+  if (last !== null) return last;
+  try {
+    const prices = typeof m.outcomePrices === "string" ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+    if (Array.isArray(prices) && prices.length > 0) return numeric(prices[0]);
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export interface PricePoint {

@@ -58,9 +58,15 @@ export class SqliteStore implements Store {
         active      INTEGER NOT NULL,
         closed      INTEGER NOT NULL,
         volume24hr  REAL,
+        last_price  REAL,
         updated_at  INTEGER NOT NULL
       );
     `);
+    // Additive migration for databases created before last_price existed.
+    const cols = this.db.prepare(`PRAGMA table_info(markets)`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "last_price")) {
+      this.db.exec(`ALTER TABLE markets ADD COLUMN last_price REAL`);
+    }
   }
 
   private prepareStatements(): void {
@@ -76,12 +82,12 @@ export class SqliteStore implements Store {
         ts = excluded.ts, snapshot = excluded.snapshot
     `);
     this.upsertMarketStmt = this.db.prepare(`
-      INSERT INTO markets (market, venue, question, slug, category, token_ids, active, closed, volume24hr, updated_at)
-      VALUES (@market, @venue, @question, @slug, @category, @tokenIds, @active, @closed, @volume24hr, @updatedAt)
+      INSERT INTO markets (market, venue, question, slug, category, token_ids, active, closed, volume24hr, last_price, updated_at)
+      VALUES (@market, @venue, @question, @slug, @category, @tokenIds, @active, @closed, @volume24hr, @lastPrice, @updatedAt)
       ON CONFLICT(market) DO UPDATE SET
         question = excluded.question, slug = excluded.slug, category = excluded.category,
         token_ids = excluded.token_ids, active = excluded.active, closed = excluded.closed,
-        volume24hr = excluded.volume24hr, updated_at = excluded.updated_at
+        volume24hr = excluded.volume24hr, last_price = excluded.last_price, updated_at = excluded.updated_at
     `);
   }
 
@@ -152,6 +158,7 @@ export class SqliteStore implements Store {
           active: m.active ? 1 : 0,
           closed: m.closed ? 1 : 0,
           volume24hr: m.volume24hr,
+          lastPrice: m.lastPrice,
           updatedAt: m.updatedAt,
         });
       }
@@ -204,6 +211,7 @@ function rowToMarket(r: any): MarketMeta {
     active: !!r.active,
     closed: !!r.closed,
     volume24hr: r.volume24hr,
+    lastPrice: r.last_price ?? null,
     updatedAt: r.updated_at,
   };
 }
