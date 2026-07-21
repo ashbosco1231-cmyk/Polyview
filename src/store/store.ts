@@ -31,6 +31,8 @@ export interface Store {
   upsertMarkets(markets: MarketMeta[]): void;
   /** List catalogue entries, most 24h volume first. */
   listMarkets(opts?: { limit?: number; activeOnly?: boolean; venue?: Venue }): MarketMeta[];
+  /** The catalogue entry that owns a given outcome token, if any. */
+  findMarketByToken(tokenId: string): MarketMeta | null;
   /** Total trades recorded (for status / proof of capture). */
   countTrades(): number;
   close(): void;

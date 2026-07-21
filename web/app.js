@@ -8,11 +8,18 @@ const state = {
   trades: [],          // rolling trade history for the active token (ascending)
   mode: { type: "tick", n: 50 },
   venue: "",            // "" = all, "polymarket", "kalshi"
+  // TradingView-style unified symbol: one question, multiple venue sources.
+  sources: [],         // [{venue, tokenId, lastPrice, confidence}] — [0] is the picked market
+  activeVenue: null,
+  compare: false,      // overlay both venues' price lines
+  overlay: null,       // { tokenId, venue, trades: [] } for the compared venue
   ws: null,
   wsReady: false,
 };
 
 const VENUE_LABEL = { polymarket: "PM", kalshi: "Kalshi" };
+const VENUE_NAME = { polymarket: "Polymarket", kalshi: "Kalshi" };
+const VENUE_COLOR = { polymarket: "#a99cf5", kalshi: "#4fd6b3" };
 
 const MAX_TRADES = 4000; // cap client memory; plenty for any on-screen chart
 
@@ -83,6 +90,8 @@ function resizeCanvas() {
 }
 
 function drawChart() {
+  if (state.compare && state.overlay) { drawCompare(); return; }
+  $("compare-legend").hidden = true;
   const W = canvas.clientWidth, H = canvas.clientHeight;
   ctx.clearRect(0, 0, W, H);
   const data = candles();
@@ -158,6 +167,74 @@ function updateFoot(last, data) {
     `<span><b>orderflow</b> <span style="color:${imbColor}">${imb >= 0 ? "+" : ""}${(imb * 100).toFixed(0)}%</span></span>`;
 }
 
+// ---------- compare mode: two venues' price lines on one time axis ----------
+function drawCompare() {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  // Both venues on a shared time axis so they line up; tick mode isn't comparable
+  // across venues, so fall back to 5m buckets when the user is on Tick.
+  const ms = state.mode.type === "time" ? TIME_MS[state.mode.n] : 300000;
+  const aC = buildTime(state.trades, ms);
+  const oC = buildTime(state.overlay.trades, ms);
+
+  const all = [...aC, ...oC];
+  if (all.length === 0) {
+    $("chart-empty").classList.add("show"); $("compare-legend").hidden = true; return;
+  }
+  $("chart-empty").classList.remove("show");
+
+  let tMin = Infinity, tMax = -Infinity, pMin = Infinity, pMax = -Infinity;
+  for (const c of all) { tMin = Math.min(tMin, c.start); tMax = Math.max(tMax, c.end); pMin = Math.min(pMin, c.low); pMax = Math.max(pMax, c.high); }
+  if (pMin === pMax) { pMin -= 0.01; pMax += 0.01; }
+  const vpad = (pMax - pMin) * 0.12; pMin -= vpad; pMax += vpad;
+  if (tMin === tMax) tMax = tMin + ms;
+
+  const padR = 52, padB = 20, padT = 12, padL = 8, plotW = W - padR - padL, plotH = H - padB - padT;
+  const X = (t) => padL + ((t - tMin) / (tMax - tMin)) * plotW;
+  const Y = (p) => padT + (1 - (p - pMin) / (pMax - pMin)) * plotH;
+
+  const hair = css("--hair"), faint = css("--ink-faint");
+  ctx.font = "10px ui-monospace, monospace"; ctx.textBaseline = "middle";
+  for (let i = 0; i <= 5; i++) {
+    const p = pMin + (pMax - pMin) * (i / 5), y = Y(p);
+    ctx.strokeStyle = hair; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(padL, y + 0.5); ctx.lineTo(W - padR, y + 0.5); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillStyle = faint; ctx.textAlign = "left"; ctx.fillText((p * 100).toFixed(1) + "¢", W - padR + 6, y);
+  }
+
+  function line(cands, color) {
+    if (cands.length === 0) return;
+    ctx.strokeStyle = color; ctx.lineWidth = 1.7; ctx.beginPath();
+    cands.forEach((c, i) => {
+      const x = X((c.start + c.end) / 2), y = Y(c.close);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    const last = cands[cands.length - 1];
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(X((last.start + last.end) / 2), Y(last.close), 3.2, 0, Math.PI * 2); ctx.fill();
+  }
+  line(aC, VENUE_COLOR[state.activeVenue]);
+  line(oC, VENUE_COLOR[state.overlay.venue]);
+
+  const aPx = aC.length ? aC[aC.length - 1].close : null;
+  const oPx = oC.length ? oC[oC.length - 1].close : null;
+  renderCompareLegend(aPx, oPx);
+  updateFoot(aC[aC.length - 1] || null, aC);
+}
+
+function renderCompareLegend(aPx, oPx) {
+  const leg = $("compare-legend"); leg.hidden = false;
+  const item = (venue, px) =>
+    `<span class="leg"><span class="leg__dot" style="background:${VENUE_COLOR[venue]}"></span>` +
+    `<span class="leg__name">${VENUE_NAME[venue]}</span>` +
+    `<span class="leg__px" style="color:${VENUE_COLOR[venue]}">${px != null ? cents(px) + "¢" : "—"}</span></span>`;
+  let html = item(state.activeVenue, aPx) + item(state.overlay.venue, oPx);
+  if (aPx != null && oPx != null) {
+    const d = (oPx - aPx) * 100;
+    html += `<span class="leg__spread">divergence <b>${d >= 0 ? "+" : ""}${d.toFixed(1)}¢</b></span>`;
+  }
+  leg.innerHTML = html;
+}
+
 // ---------- book + tape ----------
 function renderBook(book) {
   const asks = (book.asks || []).slice().sort((a, b) => a.price - b.price).slice(0, 8);
@@ -201,32 +278,118 @@ function updateHeader() {
   el.className = `chg ${chg >= 0 ? "up" : "down"}`;
 }
 
+function clearBook() {
+  $("book-asks").innerHTML = ""; $("book-bids").innerHTML = "";
+  $("book-mid").textContent = "—"; $("spread-hint").textContent = "";
+}
+
 // ---------- market selection ----------
 async function selectMarket(m) {
   state.selected = m;
   state.tokenId = m.tokenIds[0];
+  state.activeVenue = m.venue;
+  // Reset compare/source state for the new question.
+  state.compare = false; state.overlay = null;
+  $("compare-btn").classList.remove("is-active"); $("compare-legend").hidden = true;
+  state.sources = [{ venue: m.venue, tokenId: m.tokenIds[0], lastPrice: m.lastPrice, confidence: 1 }];
+
   document.querySelectorAll(".wl-row").forEach((r) => r.classList.toggle("is-active", r.dataset.market === m.market));
   $("mkt-question").textContent = m.question;
+  setVenueBadge(m.venue);
+  renderSourceSwitch();
+
+  await loadSource(m.tokenIds[0]);
+  drawChart(); updateHeader();
+  subscribe();
+  loadCounterparts(m.tokenIds[0]); // async; adds other-venue sources when ready
+}
+
+function setVenueBadge(venue) {
   const badge = $("mkt-venue");
-  badge.textContent = VENUE_LABEL[m.venue] || m.venue;
-  badge.dataset.v = m.venue;
+  badge.textContent = VENUE_LABEL[venue] || venue;
+  badge.dataset.v = venue;
   badge.hidden = false;
+}
+
+/** Load trades + book for one token into the active view. */
+async function loadSource(tokenId) {
   state.trades = [];
   $("tape").innerHTML = "";
-
-  // initial state
   try {
     const [trades, book] = await Promise.all([
-      api(`/api/trades/${state.tokenId}?limit=1000`),
-      api(`/api/book/${state.tokenId}`).catch(() => null),
+      api(`/api/trades/${tokenId}?limit=1000`),
+      api(`/api/book/${tokenId}`).catch(() => null),
     ]);
+    if (state.tokenId !== tokenId) return; // selection changed mid-fetch
     state.trades = trades.slice().reverse(); // API gives newest-first; we want ascending
     trades.slice(0, 30).forEach((t) => addTape(t, false));
-    if (book) renderBook(book);
-  } catch (e) { /* market may have no data yet */ }
+    if (book) renderBook(book); else clearBook();
+  } catch (e) { clearBook(); }
+}
 
+async function loadCounterparts(tokenId) {
+  try {
+    const data = await api(`/api/counterparts/${tokenId}?minConfidence=0.4`);
+    if (state.tokenId !== tokenId && !state.sources.some((s) => s.tokenId === tokenId)) return;
+    for (const c of data.counterparts) {
+      if (!state.sources.some((s) => s.venue === c.venue)) {
+        state.sources.push({ venue: c.venue, tokenId: c.tokenId, lastPrice: c.lastPrice, confidence: c.confidence });
+      }
+    }
+    renderSourceSwitch();
+  } catch (e) { /* no counterparts */ }
+}
+
+function renderSourceSwitch() {
+  const wrap = $("source-switch");
+  const cmp = $("compare-btn");
+  if (state.sources.length < 2) { wrap.hidden = true; cmp.hidden = true; return; }
+  wrap.hidden = false; cmp.hidden = false;
+  $("source-tabs").innerHTML = state.sources.map((s) => {
+    const active = s.venue === state.activeVenue;
+    const px = s.lastPrice != null ? cents(s.lastPrice) + "¢" : "—";
+    const conf = s.confidence != null && s.confidence < 1 ? `<span class="src-tab__conf">${Math.round(s.confidence * 100)}% match</span>` : "";
+    return `<button class="src-tab ${active ? "is-active" : ""}" data-venue="${s.venue}">` +
+      `<span class="src-tab__dot" style="background:${VENUE_COLOR[s.venue]}"></span>` +
+      `${VENUE_NAME[s.venue] || s.venue} <span class="px">${px}</span> ${conf}</button>`;
+  }).join("");
+  $("source-tabs").querySelectorAll(".src-tab").forEach((b) =>
+    b.addEventListener("click", () => switchSource(b.dataset.venue)));
+}
+
+async function switchSource(venue) {
+  const src = state.sources.find((s) => s.venue === venue);
+  if (!src || venue === state.activeVenue) return;
+  state.activeVenue = venue;
+  state.tokenId = src.tokenId;
+  setVenueBadge(venue);
+  renderSourceSwitch();
+  await loadSource(src.tokenId);
+  subscribe();
   drawChart(); updateHeader();
-  subscribe(state.tokenId);
+}
+
+async function toggleCompare() {
+  state.compare = !state.compare;
+  $("compare-btn").classList.toggle("is-active", state.compare);
+  if (state.compare) {
+    const other = state.sources.find((s) => s.venue !== state.activeVenue);
+    if (!other) { state.compare = false; $("compare-btn").classList.remove("is-active"); return; }
+    state.overlay = { tokenId: other.tokenId, venue: other.venue, trades: [] };
+    await loadOverlay(other.tokenId);
+  } else {
+    state.overlay = null;
+    $("compare-legend").hidden = true;
+  }
+  subscribe();
+  drawChart();
+}
+
+async function loadOverlay(tokenId) {
+  try {
+    const trades = await api(`/api/trades/${tokenId}?limit=1000`);
+    if (state.overlay && state.overlay.tokenId === tokenId) state.overlay.trades = trades.slice().reverse();
+  } catch (e) { if (state.overlay) state.overlay.trades = []; }
 }
 
 // ---------- live socket ----------
@@ -238,23 +401,36 @@ function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/live`);
   state.ws = ws;
-  ws.onopen = () => { state.wsReady = true; setConn("live", "live"); if (state.tokenId) subscribe(state.tokenId); };
+  ws.onopen = () => { state.wsReady = true; setConn("live", "live"); subscribe(); };
   ws.onclose = () => { state.wsReady = false; setConn("down", "reconnecting…"); setTimeout(connectWs, 2000); };
   ws.onerror = () => setConn("down", "error");
   ws.onmessage = (ev) => {
     let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.kind === "trade" && msg.trade.tokenId === state.tokenId) onLiveTrade(msg.trade);
-    else if (msg.kind === "book" && msg.book.tokenId === state.tokenId) renderBook(msg.book);
+    if (msg.kind === "trade") {
+      if (msg.trade.tokenId === state.tokenId) onLiveTrade(msg.trade);
+      else if (state.overlay && msg.trade.tokenId === state.overlay.tokenId) onOverlayTrade(msg.trade);
+    } else if (msg.kind === "book" && msg.book.tokenId === state.tokenId) {
+      renderBook(msg.book);
+    }
   };
 }
-function subscribe(tokenId) {
-  if (state.wsReady && state.ws) state.ws.send(JSON.stringify({ type: "subscribe", tokenId }));
+function subscribe() {
+  if (!state.wsReady || !state.ws) return;
+  const ids = [state.tokenId];
+  if (state.compare && state.overlay) ids.push(state.overlay.tokenId);
+  state.ws.send(JSON.stringify({ type: "subscribe", tokenIds: ids.filter(Boolean) }));
 }
 function onLiveTrade(t) {
   state.trades.push(t);
   if (state.trades.length > MAX_TRADES) state.trades.shift();
   addTape(t, true);
   drawChart(); updateHeader();
+}
+function onOverlayTrade(t) {
+  if (!state.overlay) return;
+  state.overlay.trades.push(t);
+  if (state.overlay.trades.length > MAX_TRADES) state.overlay.trades.shift();
+  drawChart();
 }
 
 // ---------- boot ----------
@@ -284,12 +460,14 @@ function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<"
 
 $("interval-tabs").addEventListener("click", (e) => {
   const btn = e.target.closest(".tab"); if (!btn) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("is-active"));
+  document.querySelectorAll("#interval-tabs .tab").forEach((t) => t.classList.remove("is-active"));
   btn.classList.add("is-active");
   const [type, n] = btn.dataset.mode.split(":");
   state.mode = { type, n: type === "tick" ? Number(n) : n };
   drawChart(); updateHeader();
 });
+
+$("compare-btn").addEventListener("click", toggleCompare);
 
 // ---------- view toggle: Terminal <-> Cross-Venue ----------
 $("nav").addEventListener("click", (e) => {

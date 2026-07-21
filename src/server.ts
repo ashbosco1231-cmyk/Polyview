@@ -44,6 +44,31 @@ export function createServer(store: Store) {
     });
   });
 
+  // Counterparts: the same question on the *other* venue(s), TradingView-style
+  // source switching. Returns the viewed market plus confident matches elsewhere.
+  app.get("/api/counterparts/:tokenId", (req, res) => {
+    const self = store.findMarketByToken(req.params.tokenId);
+    if (!self) return res.status(404).json({ error: "unknown token" });
+    const minConfidence = clampFloat(req.query.minConfidence, 0.4, 0, 1);
+
+    const otherVenue = self.venue === "polymarket" ? "kalshi" : "polymarket";
+    const others = store.listMarkets({ venue: otherVenue, activeOnly: true, limit: 500 });
+    // findMatches always takes (polymarket, kalshi); order the args by venue.
+    const matches =
+      self.venue === "polymarket"
+        ? findMatches([self], others, { minConfidence, limit: 3 })
+        : findMatches(others, [self], { minConfidence, limit: 3 });
+
+    const counterparts = matches.map((m) => {
+      const other = self.venue === "polymarket" ? m.kalshi : m.polymarket;
+      return { venue: otherVenue, tokenId: other.tokenId, question: other.question, confidence: m.confidence, lastPrice: other.yes };
+    });
+    res.json({
+      self: { venue: self.venue, tokenId: req.params.tokenId, question: self.question, lastPrice: self.lastPrice },
+      counterparts,
+    });
+  });
+
   app.get("/api/trades/:tokenId", (req, res) => {
     const limit = clampInt(req.query.limit, 100, 1, 2000);
     const trades = store.getTrades({ tokenId: req.params.tokenId, limit });

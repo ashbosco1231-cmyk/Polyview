@@ -50,17 +50,25 @@
             <span class="chg" id="mkt-chg"></span>
             <span class="venue-badge" id="mkt-venue" hidden></span>
           </div>
+          <div class="source-switch" id="source-switch" hidden>
+            <span class="source-switch__label">Source</span>
+            <div class="source-switch__tabs" id="source-tabs"></div>
+          </div>
         </div>
-        <div class="chart__controls" id="interval-tabs">
-          <button data-mode="tick:50" class="tab is-active">Tick 50</button>
-          <button data-mode="time:1m" class="tab">1m</button>
-          <button data-mode="time:5m" class="tab">5m</button>
-          <button data-mode="time:15m" class="tab">15m</button>
-          <button data-mode="time:1h" class="tab">1h</button>
+        <div class="chart__controls">
+          <div class="tabgroup" id="interval-tabs">
+            <button data-mode="tick:50" class="tab is-active">Tick 50</button>
+            <button data-mode="time:1m" class="tab">1m</button>
+            <button data-mode="time:5m" class="tab">5m</button>
+            <button data-mode="time:15m" class="tab">15m</button>
+            <button data-mode="time:1h" class="tab">1h</button>
+          </div>
+          <button class="tab compare-btn" id="compare-btn" hidden>⇄ Compare venues</button>
         </div>
       </div>
       <div class="chart__canvas-wrap">
         <canvas id="chart-canvas"></canvas>
+        <div class="compare-legend" id="compare-legend" hidden></div>
         <div class="chart__empty" id="chart-empty">No trades recorded yet for this market — they'll appear live as they print.</div>
       </div>
       <div class="chart__foot" id="chart-foot"></div>

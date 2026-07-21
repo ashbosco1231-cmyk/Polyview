@@ -10,7 +10,7 @@ import type { LiveEvent } from "./source.js";
 
 interface Client {
   socket: WebSocket;
-  tokenId: string | null;
+  tokenIds: Set<string>;
 }
 
 export class LiveHub {
@@ -23,7 +23,7 @@ export class LiveHub {
   }
 
   private onConnect(socket: WebSocket): void {
-    const client: Client = { socket, tokenId: null };
+    const client: Client = { socket, tokenIds: new Set() };
     this.clients.add(client);
 
     socket.on("message", (raw) => {
@@ -33,10 +33,16 @@ export class LiveHub {
       } catch {
         return;
       }
-      // { type: "subscribe", tokenId: "..." }
-      if (msg?.type === "subscribe" && typeof msg.tokenId === "string") {
-        client.tokenId = msg.tokenId;
-        socket.send(JSON.stringify({ type: "subscribed", tokenId: msg.tokenId }));
+      // { type: "subscribe", tokenId: "..." } or { type: "subscribe", tokenIds: [...] }
+      // A subscribe replaces the client's set, so switching markets is one message.
+      if (msg?.type === "subscribe") {
+        const ids: string[] = Array.isArray(msg.tokenIds)
+          ? msg.tokenIds.filter((t: unknown) => typeof t === "string")
+          : typeof msg.tokenId === "string"
+            ? [msg.tokenId]
+            : [];
+        client.tokenIds = new Set(ids);
+        socket.send(JSON.stringify({ type: "subscribed", tokenIds: [...client.tokenIds] }));
       }
     });
 
@@ -49,7 +55,7 @@ export class LiveHub {
     const tokenId = ev.kind === "trade" ? ev.trade.tokenId : ev.book.tokenId;
     const payload = JSON.stringify(ev);
     for (const client of this.clients) {
-      if (client.tokenId === tokenId && client.socket.readyState === client.socket.OPEN) {
+      if (client.tokenIds.has(tokenId) && client.socket.readyState === client.socket.OPEN) {
         client.socket.send(payload);
       }
     }

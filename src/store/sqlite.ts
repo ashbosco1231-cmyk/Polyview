@@ -180,6 +180,14 @@ export class SqliteStore implements Store {
     return rows.map(rowToMarket);
   }
 
+  findMarketByToken(tokenId: string): MarketMeta | null {
+    // token_ids is a JSON array string like ["123","456"]; match the quoted id.
+    const row = this.db
+      .prepare(`SELECT * FROM markets WHERE token_ids LIKE ? LIMIT 1`)
+      .get(`%"${tokenId}"%`) as any;
+    return row ? rowToMarket(row) : null;
+  }
+
   countTrades(): number {
     const row = this.db.prepare(`SELECT COUNT(*) AS c FROM trades`).get() as any;
     return row.c as number;

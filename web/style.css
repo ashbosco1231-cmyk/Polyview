@@ -127,7 +127,37 @@ body {
 .price__unit { color: var(--ink-faint); font-size: 14px; }
 .chg { font-family: var(--mono); font-size: 12px; margin-left: 8px; font-variant-numeric: tabular-nums; }
 .chg.up { color: var(--up); } .chg.down { color: var(--down); }
-.chart__controls { display: flex; gap: 3px; flex-shrink: 0; }
+.chart__controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.tabgroup { display: flex; gap: 3px; }
+.compare-btn { border-color: var(--hair) !important; }
+.compare-btn.is-active { color: var(--bg); background: var(--amber); border-color: var(--amber) !important; font-weight: 600; }
+
+/* Source switcher — TradingView-style venue selector for one question */
+.source-switch { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.source-switch__label { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-faint); }
+.source-switch__tabs { display: flex; gap: 4px; }
+.src-tab { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px;
+  color: var(--ink-soft); background: var(--panel-2); border: 1px solid var(--hair); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer; }
+.src-tab:hover { color: var(--ink); }
+.src-tab.is-active { color: var(--ink); border-color: var(--ink-soft); background: var(--panel-3); }
+.src-tab__dot { width: 8px; height: 8px; border-radius: 50%; }
+.src-tab .px { font-variant-numeric: tabular-nums; color: var(--ink-faint); }
+.src-tab.is-active .px { color: var(--ink); }
+.src-tab__conf { font-size: 9px; color: var(--ink-faint); letter-spacing: .04em; }
+
+/* Compare legend overlay */
+.compare-legend { position: absolute; top: 16px; left: 18px; display: flex; gap: 18px; align-items: center;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--hair);
+  border-radius: 7px; padding: 8px 12px; font-family: var(--mono); font-size: 12px; z-index: 2;
+  backdrop-filter: blur(4px); }
+.compare-legend .leg { display: flex; align-items: center; gap: 7px; }
+.compare-legend .leg__dot { width: 9px; height: 9px; border-radius: 2px; }
+.compare-legend .leg__name { color: var(--ink-soft); }
+.compare-legend .leg__px { font-weight: 700; font-variant-numeric: tabular-nums; }
+.compare-legend .leg__spread { color: var(--ink-faint); padding-left: 4px; border-left: 1px solid var(--hair); }
+.compare-legend .leg__spread b { color: var(--amber); }
 .tab {
   font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
   background: var(--panel-2); border: 1px solid var(--hair); border-radius: 5px;

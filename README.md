@@ -19,6 +19,10 @@ the [blueprint](./TEARDOWN_AND_BLUEPRINT.md#5-a-better-name).)
   directional arbitrage edge. Matches are similarity-ranked *candidates* with a
   confidence score — never presented as confirmed arb, because the two venues
   word the same event completely differently.
+- **Phase 4 (unified symbols)** — TradingView-style **source switching**: a
+  matched market is one *question* you view through either venue in the same
+  chart spot, plus a **Compare** overlay that plots both venues' price lines on
+  one axis with a live divergence readout — the divergence *is* the arb signal.
 
 > Full competitive teardown, strategy, and naming rationale:
 > [`TEARDOWN_AND_BLUEPRINT.md`](./TEARDOWN_AND_BLUEPRINT.md).
@@ -115,6 +119,7 @@ npm run build     # type-check + emit to dist/
 | `GET /api/candles/:tokenId?type=tick&ticks=50` | tick candles (N trades/candle) |
 | `GET /api/candles/:tokenId?type=time&interval=1m` | time candles (`1m,5m,15m,1h,1d`) |
 | `GET /api/cross-venue?minConfidence=0.3` | cross-venue candidate matches + spread/consensus/arb |
+| `GET /api/counterparts/:tokenId` | the same question on the other venue(s), for source switching |
 
 Candles include OHLCV plus `buyVolume` / `sellVolume` / `imbalance` — the
 orderflow signal behind footprint charts.
