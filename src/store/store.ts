@@ -35,5 +35,7 @@ export interface Store {
   findMarketByToken(tokenId: string): MarketMeta | null;
   /** Total trades recorded (for status / proof of capture). */
   countTrades(): number;
+  /** Force the write-ahead log into the main db file (durability on restart). */
+  checkpoint(): void;
   close(): void;
 }

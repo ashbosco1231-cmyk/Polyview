@@ -1,0 +1,33 @@
+# Fly.io deployment — a good fit for an always-on recorder with a persistent
+# volume. Rename `app` to something unique, then follow DEPLOY.md.
+#
+# CRITICAL for a recorder: the machine must NOT scale to zero, or recording
+# stops when there's no HTTP traffic. auto_stop_machines + min_machines_running
+# below keep exactly one machine running around the clock.
+
+app = "sharpline-recorder"
+primary_region = "iad"
+
+[build]
+
+[env]
+  DB_PATH = "/data/sharpline.db"
+  PORT = "3000"
+  MARKET_LIMIT = "80"
+
+# Persistent volume — create it once with:
+#   fly volumes create sharpline_data --size 3 --region iad
+[[mounts]]
+  source = "sharpline_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false      # keep recording even with no visitors
+  auto_start_machines = true
+  min_machines_running = 1        # exactly one always-on machine
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

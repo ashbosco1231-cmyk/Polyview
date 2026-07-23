@@ -18,6 +18,8 @@ export interface RecorderOptions {
   catalogueSize?: number;
   /** Flush buffered trades to the store at most this often (ms). */
   flushIntervalMs?: number;
+  /** Re-fetch the catalogue and re-point the feed this often (ms). */
+  refreshIntervalMs?: number;
   log?: (msg: string) => void;
 }
 
@@ -26,6 +28,8 @@ export class Recorder implements MarketDataSource {
   private feed: PolymarketMarketFeed | null = null;
   private buffer: Trade[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private subscribedKey = "";
   private written = 0;
   private readonly log: (msg: string) => void;
   private readonly emitter = new LiveEmitter();
@@ -46,18 +50,39 @@ export class Recorder implements MarketDataSource {
   }
 
   async start(): Promise<void> {
+    await this.refreshMarkets(); // catalogue + initial subscription
+
+    const flushMs = this.opts.flushIntervalMs ?? 2_000;
+    this.flushTimer = setInterval(() => this.flush(), flushMs);
+
+    // Over a long run, markets resolve and new ones list. Periodically re-fetch
+    // the catalogue and re-point the feed at the current busiest markets, so the
+    // recorder keeps capturing live activity instead of dead resolved markets.
+    const refreshMs = this.opts.refreshIntervalMs ?? 20 * 60_000;
+    this.refreshTimer = setInterval(() => {
+      this.refreshMarkets().catch((e) => this.log(`refresh failed: ${(e as Error).message}`));
+    }, refreshMs);
+  }
+
+  /** (Re)fetch the catalogue and (re)subscribe the feed if the token set changed. */
+  private async refreshMarkets(): Promise<void> {
     const limit = this.opts.marketLimit ?? 50;
     // Catalogue more markets than we record trades for, so the watchlist and the
     // cross-venue matcher see breadth; only the busiest slice gets a live WS feed.
     const catalogueSize = Math.max(limit, this.opts.catalogueSize ?? 100);
-    this.log(`fetching top ${catalogueSize} markets…`);
     const markets = await fetchTopMarkets(catalogueSize);
     this.store.upsertMarkets(markets);
 
     const recorded = markets.slice(0, limit);
     const tokenIds = recorded.flatMap((m) => m.tokenIds);
-    this.log(`recording ${tokenIds.length} tokens across ${recorded.length} of ${markets.length} markets`);
 
+    // Skip a needless reconnect if the recorded set is unchanged.
+    const key = tokenIds.join(",");
+    if (key === this.subscribedKey && this.feed) return;
+    this.subscribedKey = key;
+
+    this.feed?.stop();
+    this.log(`recording ${tokenIds.length} tokens across ${recorded.length} of ${markets.length} markets`);
     this.feed = new PolymarketMarketFeed(tokenIds, {
       onTrade: (t) => {
         this.buffer.push(t); // durable archive, flushed in batches
@@ -70,9 +95,6 @@ export class Recorder implements MarketDataSource {
       onStatus: (s) => this.log(s),
     });
     this.feed.start();
-
-    const flushMs = this.opts.flushIntervalMs ?? 2_000;
-    this.flushTimer = setInterval(() => this.flush(), flushMs);
   }
 
   private flush(): void {
@@ -87,6 +109,7 @@ export class Recorder implements MarketDataSource {
   stop(): void {
     this.feed?.stop();
     if (this.flushTimer) clearInterval(this.flushTimer);
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
     this.flush();
   }
 

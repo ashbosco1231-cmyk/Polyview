@@ -109,6 +109,25 @@ npm test          # unit tests
 npm run build     # type-check + emit to dist/
 ```
 
+## Running it 24/7 (this is how data actually stacks up)
+
+The recorder only accumulates history while it's **running on an always-on
+host** — locally it stops the moment you close the process. To collect a real
+tick archive, deploy it. See **[`DEPLOY.md`](./DEPLOY.md)** for one-command
+setups on Fly.io, Docker Compose, or Railway/Render.
+
+Durability is built in: trades are flushed every 2s, the write-ahead log is
+checkpointed every 60s and on shutdown, and the DB lives on a persistent volume
+(`DB_PATH`) so restarts and redeploys never lose history — verified by
+restarting mid-capture and watching the count continue, not reset. The market
+list also refreshes every ~20 min so a long run keeps following live markets as
+old ones resolve.
+
+```bash
+docker compose up -d --build     # simplest always-on start; data in a named volume
+curl localhost:3000/api/health   # {"tradesRecorded": …} should climb over time
+```
+
 ### API
 
 | Endpoint | Description |

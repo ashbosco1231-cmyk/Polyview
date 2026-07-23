@@ -193,7 +193,13 @@ export class SqliteStore implements Store {
     return row.c as number;
   }
 
+  checkpoint(): void {
+    // Fold the WAL back into the main file so a crash/restart loses nothing.
+    this.db.pragma("wal_checkpoint(TRUNCATE)");
+  }
+
   close(): void {
+    this.checkpoint();
     this.db.close();
   }
 }

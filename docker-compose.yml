@@ -1,0 +1,23 @@
+# Run the recorder on your own box or any Docker host.
+#
+#   docker compose up -d --build      # start, detached, keep it running
+#   docker compose logs -f            # watch trades stack up
+#   docker compose down               # stop (the volume + data persist)
+#
+# The named volume keeps the database across restarts and rebuilds.
+services:
+  sharpline:
+    build: .
+    restart: unless-stopped # survive crashes and host reboots
+    ports:
+      - "3000:3000"
+    volumes:
+      - sharpline-data:/data
+    environment:
+      - DB_PATH=/data/sharpline.db
+      - MARKET_LIMIT=80 # how many Polymarket markets get a live WS feed
+      # - KALSHI=0       # uncomment to record Polymarket only
+      # - POLYMARKET=0   # uncomment to record Kalshi only
+
+volumes:
+  sharpline-data:

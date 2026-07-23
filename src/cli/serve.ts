@@ -49,10 +49,15 @@ http.listen(port, () => {
   console.log(`[serve] API under /api, live push at ws://localhost:${port}/live`);
 });
 
+// Periodically fold the WAL into the main db file so an unexpected kill (a
+// deploy, an OOM, a host reboot) loses at most a few minutes of trades.
+const checkpointTimer = setInterval(() => store.checkpoint(), 60_000);
+
 function shutdown(): void {
+  clearInterval(checkpointTimer);
   for (const src of sources) src.stop();
   http.close();
-  store.close();
+  store.close(); // checkpoints then closes
   process.exit(0);
 }
 process.on("SIGINT", shutdown);

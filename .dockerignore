@@ -1,0 +1,10 @@
+node_modules
+dist
+*.db
+*.db-wal
+*.db-shm
+.git
+.env
+npm-debug.log
+*.log
+teardown.html
