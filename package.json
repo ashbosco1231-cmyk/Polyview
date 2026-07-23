@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "start": "tsx src/cli/serve.ts",
     "record": "tsx src/cli/record.ts",
     "serve": "tsx src/cli/serve.ts",
     "dev": "tsx watch src/cli/serve.ts",
