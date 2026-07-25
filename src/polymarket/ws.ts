@@ -11,7 +11,11 @@
 // exponential backoff. It also sends a periodic ping so idle connections on
 // quiet markets don't get culled.
 
+import WebSocket from "ws";
 import type { BookLevel, BookSnapshot, Trade } from "../types.js";
+
+// Use the `ws` package's client explicitly rather than the global WebSocket:
+// the global only exists on Node 21+, and production hosts often run Node 20.
 
 const WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 
@@ -63,7 +67,7 @@ export class PolymarketMarketFeed {
       }, 10_000);
     });
 
-    ws.addEventListener("message", (ev) => this.handleMessage(String((ev as MessageEvent).data)));
+    ws.addEventListener("message", (ev) => this.handleMessage(String((ev as { data: unknown }).data)));
 
     ws.addEventListener("error", () => this.status("socket error"));
 
