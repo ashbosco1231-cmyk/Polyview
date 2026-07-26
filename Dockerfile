@@ -18,12 +18,15 @@ RUN npm ci
 
 COPY . .
 
-# The database lives on a mounted volume so it survives restarts and redeploys.
+# The database lives at /data, which is where you attach a Railway Volume (or a
+# Docker/Fly volume) so it survives restarts and redeploys. We only create the
+# directory here — the Dockerfile VOLUME instruction is intentionally omitted
+# because Railway's builder rejects it (attach the volume in the Railway UI).
+RUN mkdir -p /data
 ENV DB_PATH=/data/sharpline.db
 ENV PORT=3000
 ENV MARKET_LIMIT=80
 ENV NODE_ENV=production
-VOLUME ["/data"]
 EXPOSE 3000
 
 # `serve` records BOTH venues and serves the terminal + API. Use `npm run record`
