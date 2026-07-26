@@ -24,10 +24,11 @@ COPY . .
 # because Railway's builder rejects it (attach the volume in the Railway UI).
 RUN mkdir -p /data
 ENV DB_PATH=/data/sharpline.db
-ENV PORT=3000
 ENV MARKET_LIMIT=80
 ENV NODE_ENV=production
-EXPOSE 3000
+# Do NOT hard-code PORT: hosts like Railway inject their own PORT and route the
+# public domain to it. The app reads process.env.PORT (falling back to 3000
+# locally), so leaving it unset here lets the host's port win.
 
 # `serve` records BOTH venues and serves the terminal + API. Use `npm run record`
 # instead for a headless recorder with no HTTP surface.
