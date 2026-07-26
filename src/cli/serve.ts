@@ -27,6 +27,16 @@ app.use(express.static(path.resolve(here, "../../web")));
 const http = createHttpServer(app);
 const hub = new LiveHub(http);
 
+// Open the HTTP port FIRST, before the recorder warms up. Starting the sources
+// fetches hundreds of markets from both venues, which takes several seconds — if
+// we awaited that before listening, a platform health check would hit a dead
+// port and report "application failed to respond". The web server must be up
+// immediately; the recorder catches up in the background.
+http.listen(port, () => {
+  console.log(`[serve] Sharpline terminal on http://localhost:${port}`);
+  console.log(`[serve] API under /api, live push at ws://localhost:${port}/live`);
+});
+
 // Both venues feed the same store and the same live hub. Toggle each with an
 // env flag; default is both on.
 const sources: MarketDataSource[] = [];
@@ -38,16 +48,13 @@ if (process.env.RECORD !== "0") {
     sources.push(new KalshiSource(store));
   }
 }
+// Start sources in the background. A slow or failing source must never take the
+// web server down with it, so we don't await and we swallow start errors.
 for (const src of sources) {
   src.onLive((ev) => hub.broadcast(ev));
-  await src.start();
+  src.start().catch((e) => console.error(`[serve] ${src.name} failed to start: ${(e as Error).message}`));
 }
-
-http.listen(port, () => {
-  console.log(`[serve] Sharpline terminal on http://localhost:${port}`);
-  console.log(`[serve] venues: ${sources.map((s) => s.name).join(", ") || "none (RECORD=0)"}`);
-  console.log(`[serve] API under /api, live push at ws://localhost:${port}/live`);
-});
+console.log(`[serve] venues starting: ${sources.map((s) => s.name).join(", ") || "none (RECORD=0)"}`);
 
 // Periodically fold the WAL into the main db file so an unexpected kill (a
 // deploy, an OOM, a host reboot) loses at most a few minutes of trades.
