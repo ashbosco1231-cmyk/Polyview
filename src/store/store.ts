@@ -38,7 +38,7 @@ export interface Store {
   /** Bytes the archive currently occupies on disk, for capacity reporting. */
   sizeOnDisk(): number;
   /** Fold any pre-existing legacy table into the current schema. Idempotent. */
-  migrateLegacyTrades(log?: (msg: string) => void): void;
+  migrateLegacyTrades(log?: (msg: string) => void): Promise<void>;
   /** Force the write-ahead log into the main db file (durability on restart). */
   checkpoint(): void;
   close(): void;

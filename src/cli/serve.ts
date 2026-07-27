@@ -57,7 +57,7 @@ if (process.env.RECORD !== "0") {
 // recorders aren't competing with a VACUUM for the same connection.
 async function boot(): Promise<void> {
   try {
-    store.migrateLegacyTrades((m) => console.log(`[store] ${m}`));
+    await store.migrateLegacyTrades((m) => console.log(`[store] ${m}`));
   } catch (e) {
     console.error(`[store] legacy migration failed (continuing): ${(e as Error).message}`);
   }

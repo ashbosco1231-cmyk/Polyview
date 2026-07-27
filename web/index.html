@@ -4,37 +4,52 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sharpline — prediction market terminal</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <span class="brand__mark">◆</span>
+    <a class="brand" href="/">
+      <!-- The mark: a price line that breaks sharply upward, last print called
+           out. "Sharp" (the pro bettor) and "line" (the odds, and the chart). -->
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path class="brand__mark-tail" d="M3 23.5 L10.5 26 L16.5 17.5" />
+        <path class="brand__mark-edge" d="M16.5 17.5 L21.5 20.5 L29 5.5" />
+        <circle class="brand__mark-dot" cx="29" cy="5.5" r="2.9" />
+      </svg>
       <span class="brand__name">Sharpline</span>
-      <span class="brand__tag">prediction-market terminal</span>
-    </div>
+    </a>
+
     <nav class="nav" id="nav">
       <button data-view="terminal" class="nav__tab is-active">Terminal</button>
       <button data-view="cross" class="nav__tab">Cross-Venue</button>
     </nav>
+
     <div class="status">
-      <span class="status__venue">POLYMARKET + KALSHI</span>
-      <span class="status__dot" id="conn-dot" data-state="connecting"></span>
-      <span class="status__label" id="conn-label">connecting…</span>
+      <span class="status__archive" id="status-archive" title="Trades captured in the archive"></span>
+      <span class="status__sep"></span>
+      <span class="status__venues">POLYMARKET · KALSHI</span>
+      <span class="status__conn">
+        <span class="status__dot" id="conn-dot" data-state="connecting"></span>
+        <span class="status__label" id="conn-label">connecting</span>
+      </span>
     </div>
   </header>
 
-  <main class="grid">
+  <main class="grid" id="terminal-view">
     <!-- Watchlist -->
     <aside class="panel watchlist">
       <div class="panel__head">
-        <span>Markets</span>
+        <span class="panel__title">Markets</span>
         <span class="panel__hint" id="market-count"></span>
       </div>
-      <div class="venue-filter" id="venue-filter">
-        <button data-venue="" class="vtab is-active">All</button>
-        <button data-venue="polymarket" class="vtab">Polymarket</button>
-        <button data-venue="kalshi" class="vtab">Kalshi</button>
+      <div class="watchlist__search">
+        <input type="search" id="market-search" placeholder="Filter markets…" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="seg seg--fill" id="venue-filter">
+        <button data-venue="" class="seg__btn is-active">All</button>
+        <button data-venue="polymarket" class="seg__btn">Polymarket</button>
+        <button data-venue="kalshi" class="seg__btn">Kalshi</button>
       </div>
       <div class="watchlist__rows" id="watchlist"></div>
     </aside>
@@ -42,47 +57,87 @@
     <!-- Chart -->
     <section class="panel chart">
       <div class="chart__head">
-        <div class="chart__title">
+        <div class="chart__ident">
           <h1 id="mkt-question">Select a market</h1>
-          <div class="chart__price">
+          <div class="chart__quote">
             <span class="price" id="mkt-price">—</span>
-            <span class="price__unit">¢</span>
             <span class="chg" id="mkt-chg"></span>
             <span class="venue-badge" id="mkt-venue" hidden></span>
           </div>
-          <div class="source-switch" id="source-switch" hidden>
-            <span class="source-switch__label">Source</span>
-            <div class="source-switch__tabs" id="source-tabs"></div>
-          </div>
         </div>
-        <div class="chart__controls">
-          <div class="tabgroup" id="interval-tabs">
-            <button data-mode="tick:50" class="tab is-active">Tick 50</button>
-            <button data-mode="time:1m" class="tab">1m</button>
-            <button data-mode="time:5m" class="tab">5m</button>
-            <button data-mode="time:15m" class="tab">15m</button>
-            <button data-mode="time:1h" class="tab">1h</button>
-          </div>
-          <button class="tab compare-btn" id="compare-btn" hidden>⇄ Compare venues</button>
+        <div class="source-switch" id="source-switch" hidden>
+          <span class="source-switch__label">Source</span>
+          <div class="source-switch__tabs" id="source-tabs"></div>
         </div>
       </div>
-      <div class="chart__canvas-wrap">
-        <canvas id="chart-canvas"></canvas>
-        <div class="compare-legend" id="compare-legend" hidden></div>
-        <div class="chart__empty" id="chart-empty">No trades recorded yet for this market — they'll appear live as they print.</div>
+
+      <div class="chart__toolbar">
+        <div class="seg" id="interval-tabs">
+          <button data-mode="time:1m" class="seg__btn is-active">1m</button>
+          <button data-mode="time:5m" class="seg__btn">5m</button>
+          <button data-mode="time:15m" class="seg__btn">15m</button>
+          <button data-mode="time:1h" class="seg__btn">1h</button>
+          <button data-mode="time:4h" class="seg__btn">4h</button>
+          <button data-mode="time:1d" class="seg__btn">1D</button>
+          <button data-mode="tick:50" class="seg__btn">Tick</button>
+        </div>
+
+        <div class="toolbar__right">
+          <div class="dropdown" id="indicator-menu">
+            <button class="btn" id="indicator-btn" aria-haspopup="true" aria-expanded="false">
+              <svg viewBox="0 0 16 16" class="btn__icon" aria-hidden="true">
+                <path d="M1 12 L5 7 L8 9.5 L15 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Indicators
+              <span class="btn__count" id="indicator-count" hidden></span>
+            </button>
+            <div class="dropdown__menu" id="indicator-list" hidden></div>
+          </div>
+          <button class="btn" id="compare-btn" hidden>
+            <svg viewBox="0 0 16 16" class="btn__icon" aria-hidden="true">
+              <path d="M2 5h9M2 5l2.5-2.5M2 5l2.5 2.5M14 11H5M14 11l-2.5-2.5M14 11l-2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Compare
+          </button>
+          <button class="btn btn--icon" id="fit-btn" title="Fit to data">
+            <svg viewBox="0 0 16 16" class="btn__icon" aria-hidden="true">
+              <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
+
+      <div class="chart__stage">
+        <div class="chart__legend" id="chart-legend"></div>
+        <div class="chart__mount" id="chart-mount"></div>
+        <div class="chart__empty" id="chart-empty">
+          <strong>No trades recorded yet</strong>
+          <span>Prints will appear here live as they happen, and the archive keeps them for replay.</span>
+        </div>
+        <div class="chart__loading" id="chart-loading" hidden>loading history…</div>
+      </div>
+
       <div class="chart__foot" id="chart-foot"></div>
     </section>
 
     <!-- Book + tape -->
     <aside class="panel side">
-      <div class="panel__head"><span>Order Book</span><span class="panel__hint" id="spread-hint"></span></div>
-      <div class="book" id="book">
-        <div class="book__col book__asks" id="book-asks"></div>
-        <div class="book__mid" id="book-mid">—</div>
-        <div class="book__col book__bids" id="book-bids"></div>
+      <div class="panel__head">
+        <span class="panel__title">Order Book</span>
+        <span class="panel__hint" id="spread-hint"></span>
       </div>
-      <div class="panel__head panel__head--tape"><span>Trades</span><span class="panel__hint">live</span></div>
+      <div class="book" id="book">
+        <div class="book__col" id="book-asks"></div>
+        <div class="book__mid" id="book-mid">—</div>
+        <div class="book__col" id="book-bids"></div>
+      </div>
+      <div class="panel__head panel__head--tape">
+        <span class="panel__title">Time &amp; Sales</span>
+        <span class="panel__hint">live</span>
+      </div>
+      <div class="tape__cols">
+        <span>Side</span><span>Price</span><span>Size</span><span>Time</span>
+      </div>
       <div class="tape" id="tape"></div>
     </aside>
   </main>
@@ -100,12 +155,12 @@
       <table class="cv__table">
         <thead>
           <tr>
-            <th class="cv-c-match">Match</th>
+            <th>Match</th>
             <th class="cv-c-num">Polymarket</th>
             <th class="cv-c-num">Kalshi</th>
             <th class="cv-c-num">Spread</th>
             <th class="cv-c-num">Consensus</th>
-            <th class="cv-c-arb">Edge</th>
+            <th class="cv-c-num">Edge</th>
           </tr>
         </thead>
         <tbody id="cv-body"></tbody>
@@ -114,6 +169,7 @@
     </div>
   </section>
 
-  <script src="app.js"></script>
+  <script src="vendor/lightweight-charts.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

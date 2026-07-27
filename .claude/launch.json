@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sharpline",
+      "runtimeExecutable": "/Users/ab2/Sharpline/run.sh",
+      "runtimeArgs": ["npm", "run", "serve"],
+      "port": 3000
+    }
+  ]
+}

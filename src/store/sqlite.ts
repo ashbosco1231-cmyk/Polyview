@@ -323,12 +323,14 @@ export class SqliteStore implements Store {
    * Fold a pre-existing `trades` table into the tick archive and reclaim the
    * space. Safe to call on every boot: it no-ops once the legacy table is gone.
    *
-   * Deliberately NOT called from the constructor. On the deployed database this
-   * walks millions of rows and then VACUUMs, which takes far longer than a
-   * platform health check will wait — so it runs in the background after the
-   * HTTP port is already open.
+   * Deliberately NOT called from the constructor, and it yields to the event
+   * loop between batches. On the deployed archive this walks millions of rows
+   * over several minutes; better-sqlite3 is synchronous, so without the yields
+   * the HTTP server would accept connections and answer none of them — which
+   * from outside is indistinguishable from a hung process, and is exactly the
+   * "application failed to respond" failure this codebase has already hit once.
    */
-  migrateLegacyTrades(log: (msg: string) => void = () => {}): void {
+  async migrateLegacyTrades(log: (msg: string) => void = () => {}): Promise<void> {
     const legacy = this.db
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'trades'`)
       .get();
@@ -367,13 +369,24 @@ export class SqliteStore implements Store {
       tx(rows);
       moved += rows.length;
       log(`  migrated ${moved.toLocaleString()} / ${total.toLocaleString()}`);
+      // Hand the loop back so the API keeps answering while this runs.
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
     this.db.exec(`DROP TABLE trades`);
+
     // Dropping a table frees pages inside the file but does not shrink it, and
-    // shrinking is the entire point here.
-    log("compacting database (VACUUM)…");
-    this.db.exec(`VACUUM`);
+    // shrinking is the point. VACUUM cannot be chunked or interrupted, so it is
+    // one blocking stretch — short relative to the row walk above, because it
+    // rewrites only the surviving (now ~10x smaller) data. SKIP_VACUUM leaves
+    // the file at its current size; the freed pages are still reused for new
+    // ticks, so growth stays paused either way.
+    if (process.env.SKIP_VACUUM === "1") {
+      log("skipping VACUUM (SKIP_VACUUM=1); freed pages will be reused in place");
+    } else {
+      log("compacting database (VACUUM) — this blocks briefly…");
+      this.db.exec(`VACUUM`);
+    }
 
     this.tickCount = (this.db.prepare(`SELECT COUNT(*) AS c FROM ticks`).get() as any).c;
     const after = this.sizeOnDisk();
