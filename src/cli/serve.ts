@@ -48,13 +48,26 @@ if (process.env.RECORD !== "0") {
     sources.push(new KalshiSource(store));
   }
 }
-// Start sources in the background. A slow or failing source must never take the
-// web server down with it, so we don't await and we swallow start errors.
-for (const src of sources) {
-  src.onLive((ev) => hub.broadcast(ev));
-  src.start().catch((e) => console.error(`[serve] ${src.name} failed to start: ${(e as Error).message}`));
+
+// Everything below runs *after* listen(), never before it. The one-time legacy
+// migration walks the whole archive and then VACUUMs, which on the deployed
+// database takes far longer than a platform health check will wait — blocking
+// the port on it is exactly the "application failed to respond" failure this
+// file already guards against. Sources start once the migration is done so the
+// recorders aren't competing with a VACUUM for the same connection.
+async function boot(): Promise<void> {
+  try {
+    store.migrateLegacyTrades((m) => console.log(`[store] ${m}`));
+  } catch (e) {
+    console.error(`[store] legacy migration failed (continuing): ${(e as Error).message}`);
+  }
+  for (const src of sources) {
+    src.onLive((ev) => hub.broadcast(ev));
+    src.start().catch((e) => console.error(`[serve] ${src.name} failed to start: ${(e as Error).message}`));
+  }
+  console.log(`[serve] venues starting: ${sources.map((s) => s.name).join(", ") || "none (RECORD=0)"}`);
 }
-console.log(`[serve] venues starting: ${sources.map((s) => s.name).join(", ") || "none (RECORD=0)"}`);
+void boot();
 
 // Periodically fold the WAL into the main db file so an unexpected kill (a
 // deploy, an OOM, a host reboot) loses at most a few minutes of trades.

@@ -23,6 +23,24 @@ export function createServer(store: Store) {
     res.json({ ok: true, tradesRecorded: store.countTrades() });
   });
 
+  // Capacity + footprint. The archive is the product, so how fast it grows and
+  // what each trade costs to keep are numbers worth being able to read directly
+  // rather than infer from a hosting dashboard.
+  app.get("/api/stats", (_req, res) => {
+    const ticks = store.countTrades();
+    const bytes = store.sizeOnDisk();
+    const mem = process.memoryUsage();
+    res.json({
+      ticks,
+      diskBytes: bytes,
+      diskMB: round(bytes / 1048576, 1),
+      bytesPerTick: ticks > 0 ? round(bytes / ticks, 1) : null,
+      rssMB: round(mem.rss / 1048576, 1),
+      heapUsedMB: round(mem.heapUsed / 1048576, 1),
+      uptimeSec: Math.round(process.uptime()),
+    });
+  });
+
   app.get("/api/markets", (req, res) => {
     const limit = clampInt(req.query.limit, 100, 1, 500);
     const venue = req.query.venue === "polymarket" || req.query.venue === "kalshi" ? req.query.venue : undefined;

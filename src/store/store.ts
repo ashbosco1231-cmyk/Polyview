@@ -35,6 +35,10 @@ export interface Store {
   findMarketByToken(tokenId: string): MarketMeta | null;
   /** Total trades recorded (for status / proof of capture). */
   countTrades(): number;
+  /** Bytes the archive currently occupies on disk, for capacity reporting. */
+  sizeOnDisk(): number;
+  /** Fold any pre-existing legacy table into the current schema. Idempotent. */
+  migrateLegacyTrades(log?: (msg: string) => void): void;
   /** Force the write-ahead log into the main db file (durability on restart). */
   checkpoint(): void;
   close(): void;

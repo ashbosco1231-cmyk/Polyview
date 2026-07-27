@@ -20,6 +20,7 @@
     "@types/ws": "^8.18.1",
     "better-sqlite3": "^11.8.1",
     "express": "^4.21.2",
+    "lightweight-charts": "^5.2.0",
     "ws": "^8.21.1"
   },
   "devDependencies": {
