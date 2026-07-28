@@ -38,12 +38,18 @@ def generate(
     seed: int = 7,
     roll_gap: float = 12.0,
     drift: float = 0.0,
+    overnight_gap_pts: float = 8.0,
 ) -> pd.DataFrame:
-    """Generate RTH bars following a random walk, with realistic roll gaps.
+    """Generate RTH bars following a random walk, with realistic gaps.
 
     ``roll_gap`` reproduces the price step between expiring and incoming
     contracts that appears in unadjusted continuous data, so ``back_adjust`` has
     something real to correct.
+
+    ``overnight_gap_pts`` is the standard deviation of the gap between one
+    session's close and the next session's open. It is drawn with zero mean, so
+    it adds no edge -- a gap-fade strategy still has nothing to find here -- but
+    it lets gap-based setups actually trigger.
     """
     rng = np.random.default_rng(seed)
 
@@ -79,6 +85,21 @@ def generate(
     open_[1:] = close[:-1]
     high = np.maximum(open_, close) + noise
     low = np.minimum(open_, close) - noise
+
+    # Overnight gaps. The cash session does not reopen where it closed -- ES trades
+    # all night and reacts to Asia, Europe and overnight news before 09:30. Without
+    # this the generated series is one continuous intraday walk, and any setup that
+    # references the gap or the prior session's close never fires at all.
+    local_dates = np.asarray(index.tz_convert("America/New_York").date)
+    day_starts = np.flatnonzero(local_dates[1:] != local_dates[:-1]) + 1
+    overnight = rng.normal(0.0, overnight_gap_pts, len(day_starts))
+    gap_offset = np.zeros(n)
+    for start_i, g in zip(day_starts, overnight):
+        gap_offset[start_i:] += g
+    open_ = open_ + gap_offset
+    high = high + gap_offset
+    low = low + gap_offset
+    close = close + gap_offset
 
     symbols = np.array([_contract_symbol(ts) for ts in index.tz_convert("America/New_York")])
     changes = np.flatnonzero(symbols[1:] != symbols[:-1]) + 1

@@ -33,7 +33,8 @@ import pandas as pd
 
 from .config import Instrument
 from .engine import backtest
-from .strategies import Strategy
+from .session import bar_minutes, trade_activity
+from .strategies import Strategy, build_signal
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def sweep(
     rows = []
     for combo_id, params in enumerate(param_combos(grid)):
         try:
-            sig = strategy(df, **params)
+            sig = build_signal(strategy, df, **params)
         except Exception as exc:  # a bad param combo should not kill the sweep
             log.debug("params %s failed: %s", params, exc)
             continue
@@ -72,7 +73,8 @@ def sweep(
         # combo_id lets callers recover the exact original parameter values
         # instead of reading them back out of the DataFrame, where numpy would
         # have silently coerced ints to floats.
-        rows.append({"combo_id": combo_id, **params, **res.stats})
+        activity = trade_activity(res.trades, df, bar_minutes(df))
+        rows.append({"combo_id": combo_id, **params, **res.stats, **activity})
     out = pd.DataFrame(rows)
     return out.sort_values("sharpe", ascending=False).reset_index(drop=True) if len(out) else out
 
@@ -148,9 +150,21 @@ class WalkForwardResult:
     diagnostics: dict = field(default_factory=dict)
 
     def verdict(self) -> str:
-        """A blunt one-word read on whether this is worth pursuing."""
+        """A blunt one-word read on whether this is worth pursuing.
+
+        Tradeability is checked before performance. A strategy that fires nine
+        times a session cannot be executed by hand no matter how good its Sharpe
+        looks, so there is no point discussing its returns.
+        """
         d = self.diagnostics
         sharpe = self.oos_stats.get("sharpe", float("nan"))
+
+        tpd = d.get("trades_per_day", 0.0)
+        if tpd > d.get("max_trades_per_day_allowed", 4.0):
+            return f"NOT MANUALLY TRADEABLE ({tpd:.1f} trades/day)"
+        if tpd < 0.05:
+            return "NO TRADES (setup effectively never fires)"
+
         if not np.isfinite(sharpe) or sharpe <= 0:
             return "DEAD"
         if sharpe < d.get("noise_floor", 0.0):
@@ -173,6 +187,7 @@ def walk_forward(
     anchored: bool = True,
     contracts: int = 1,
     select_by: str = "sharpe",
+    max_trades_per_day_allowed: float = 4.0,
 ) -> WalkForwardResult:
     """Optimize in-sample, score out-of-sample, repeat forward through time.
 
@@ -207,7 +222,7 @@ def walk_forward(
         best = is_table.iloc[0]
         params = combos[int(best["combo_id"])]
 
-        sig = strategy(test, **params)
+        sig = build_signal(strategy, test, **params)
         oos = backtest(test, sig, instrument, contracts=contracts)
         oos_chunks.append(oos.pnl)
 
@@ -224,6 +239,8 @@ def walk_forward(
                 "oos_sharpe": oos.stats["sharpe"],
                 "oos_net_pnl": oos.stats["net_pnl"],
                 "oos_trades": oos.stats["n_trades"],
+                **{f"oos_{k}": v for k, v in trade_activity(
+                    oos.trades, test, bar_minutes(test)).items()},
             }
         )
 
@@ -252,7 +269,16 @@ def walk_forward(
         "mean_is_sharpe": float(folds["is_sharpe"].mean()),
         "mean_oos_sharpe": float(folds["oos_sharpe"].mean()),
         "folds_profitable": float((folds["oos_net_pnl"] > 0).mean()),
+        "max_trades_per_day_allowed": max_trades_per_day_allowed,
     }
+    # Manual-tradeability, averaged over the out-of-sample folds only.
+    for key in ("trades_per_day", "avg_hold_min", "max_hold_min", "busiest_day"):
+        col = f"oos_{key}"
+        if col in folds.columns:
+            series = pd.to_numeric(folds[col], errors="coerce").dropna()
+            if len(series):
+                diagnostics[key] = float(series.max() if key in
+                                         ("max_hold_min", "busiest_day") else series.mean())
     # How much of the in-sample edge survived. 1.0 means all of it vanished.
     mis = diagnostics["mean_is_sharpe"]
     diagnostics["is_oos_decay"] = (
@@ -269,7 +295,7 @@ def walk_forward(
     if len(folds):
         params = combos[int(folds.iloc[-1]["combo_id"])]
         stressed = instrument.with_stress(2.0)
-        sig = strategy(df, **params)
+        sig = build_signal(strategy, df, **params)
         diagnostics["stress_sharpe"] = backtest(df, sig, stressed, contracts).stats["sharpe"]
 
         # Plateau check on the full sample, using the same grid.

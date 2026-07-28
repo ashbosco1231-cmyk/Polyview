@@ -78,6 +78,69 @@ python scripts/optimize.py --strategy rsi_reversion \
 
 ---
 
+## Day trading the New York session
+
+The harness is set up for short intraday holds in the US cash session, executed
+by hand. Three constraints are enforced by :mod:`esbt.rules` rather than by each
+strategy, so every setup is held to the same discipline:
+
+- **Time stop** — exit after N minutes regardless of the signal. A day trade that
+  has not worked inside its window is a losing trade that has not been closed yet.
+  The holding limit is a *searchable parameter* (10/15/20/30 min by default), so
+  the walk-forward picks it rather than you guessing.
+- **Entry window** — each strategy only initiates inside its own local-time
+  window. Most index intraday edges live in the first two hours; the lunch lull
+  is a different regime and blending them averages one into the other.
+- **Flat into the bell** — nothing is held past 15:55 ET. Carrying ES overnight
+  makes it a different strategy with different risk.
+
+After a forced exit, re-entry is blocked until the signal actually resets.
+Without that a persistent signal re-enters on the next bar and the time stop
+accomplishes nothing except extra commission.
+
+### The six setups
+
+| Strategy | Mechanism | Entry window (ET) |
+|---|---|---|
+| `opening_range_breakout` | Break of the first N minutes' range | 09:45–12:00 |
+| `opening_drive` | Continuation of the session's first move | 09:35–11:00 |
+| `gap_fade` | Fade the overnight gap toward prior close | 09:30–11:00 |
+| `prior_day_break` | Break of prior session high/low | 09:30–14:00 |
+| `vwap_reversion` | Fade a stretch from session VWAP | 10:00–15:00 |
+| `vwap_trend` | Buy pullbacks to a rising VWAP | 10:00–15:00 |
+
+These are six distinct *mechanisms*, not six variations on a moving average.
+Six flavours of one idea tested against one dataset produce six correlated
+results and a false sense of confirmation. Note that `vwap_reversion` and
+`vwap_trend` directly contradict each other — if both "work", the search is
+fitting noise.
+
+### Screening them
+
+```bash
+# Dry run with no data and no API key -- everything should be rejected
+python scripts/screen.py --synthetic
+
+# The real thing
+python scripts/screen.py --start 2023-01-01 --end 2024-12-31 --resample 5min
+```
+
+This walk-forwards every strategy and prints a league table sorted by margin over
+the noise floor. **Tradeability is checked before performance**: a setup firing
+nine times a session is rejected outright regardless of its Sharpe, because it is
+not something a person can execute.
+
+Reference output on random-walk data, which is what "nothing" looks like:
+
+```
+              strategy                      verdict  oos_sharpe  noise_floor  margin  trades_day  hold_min
+              gap_fade INDISTINGUISHABLE FROM NOISE        0.49         1.84   -1.35        0.33     15.64
+       prior_day_break                         DEAD       -1.55         1.55   -3.09        1.08     14.08
+        vwap_reversion                         DEAD       -3.18         1.99   -5.17        2.14     26.52
+```
+
+---
+
 ## What the harness refuses to let you do
 
 **Look ahead.** A strategy emits a target position from information available at
@@ -157,14 +220,17 @@ esbt/
   config.py       contract specs and cost models (ES, MES)
   data.py         Databento loader, cost gating, caching, back-adjustment
   engine.py       vectorized backtest core; lookahead impossible by construction
-  strategies.py   starter signal generators and their parameter grids
+  strategies.py   six NY-session day-trade setups and their grids
+  rules.py        time stops, entry windows, flat-into-the-bell, trade budgets
+  session.py      session VWAP, opening range, prior-day levels, activity stats
   walkforward.py  parameter sweep, walk-forward, overfitting diagnostics
   report.py       terminal reporting
   synthetic.py    random-walk data generator for offline calibration
 scripts/
   fetch_data.py   price and download data
-  optimize.py     run a walk-forward optimization
-tests/            20 tests, focused on what would silently corrupt results
+  optimize.py     run a walk-forward optimization on one strategy
+  screen.py       walk-forward every strategy and rank the survivors
+tests/            41 tests, focused on what would silently corrupt results
 ```
 
 ```bash

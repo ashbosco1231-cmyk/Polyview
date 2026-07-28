@@ -1,123 +1,287 @@
-"""Starter strategies.
+"""New York session day-trading strategies for ES.
 
-Each is a plain function from (bars, params) to a target-position series in
-{-1, 0, +1}, using only data available up to and including each bar's close. The
-engine handles the one-bar execution delay, so these can be written naturally
-without worrying about shifting.
+Each function returns a *raw* signal in {-1, 0, +1} meaning "the setup is present
+in this direction right now", using only information available at that bar's
+close. Timing constraints -- time stops, entry windows, going flat into the bell,
+trade budgets -- are not baked into the strategies; they are applied uniformly by
+:mod:`esbt.rules`, so every strategy is held to the same execution discipline and
+the constraints themselves can be searched as parameters.
 
-These exist to exercise the harness, not as trade recommendations. Two of them
-are near-coin-flips on ES after costs, which is itself the useful lesson.
+The six setups are deliberately different *mechanisms* rather than six variations
+on a moving average, because six flavours of the same idea tested against one
+dataset produce six correlated results and one illusion of confirmation.
+
+None of these is a recommendation. Several are likely to fail on real data, and
+finding that out cheaply is the point.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
 
+from .rules import apply_rules
+from .session import (
+    bar_minutes,
+    minutes_since_open,
+    opening_range,
+    prior_session_levels,
+    session_date,
+    session_open_price,
+    session_vwap,
+    vwap_bands,
+)
+
+# Parameters consumed by the execution-rule layer rather than the signal itself.
+RULE_PARAMS = {"hold_min", "max_trades_per_day", "cooldown_bars"}
+
 
 @dataclass(frozen=True)
 class Strategy:
-    """A named signal generator plus the parameter grid worth searching."""
+    """A signal generator, its search grid, and its default execution rules."""
 
     name: str
     fn: Callable[..., pd.Series]
     grid: dict[str, Iterable]
+    entry_window: tuple[str, str] = ("09:30", "16:00")
+    flatten_at: str = "15:55"
+    description: str = ""
+    rules: dict = field(default_factory=dict)
 
-    def __call__(self, df: pd.DataFrame, **params) -> pd.Series:
-        return self.fn(df, **params)
 
+def build_signal(strategy: Strategy, df: pd.DataFrame, **params) -> pd.Series:
+    """Generate a strategy's signal and apply its execution rules.
 
-def ma_crossover(df: pd.DataFrame, fast: int = 20, slow: int = 100) -> pd.Series:
-    """Long when the fast average is above the slow one, short when below.
-
-    The canonical trend template. On intraday ES it is usually a loser after
-    costs, which makes it a good honesty check on the harness.
+    Splits ``params`` into signal parameters and rule parameters, so a walk-forward
+    search can optimize the holding time alongside the setup's own thresholds.
     """
-    if fast >= slow:
-        return pd.Series(0.0, index=df.index)
-    close = df["close"]
-    f = close.rolling(fast).mean()
-    s = close.rolling(slow).mean()
-    return np.sign(f - s).fillna(0.0)
+    sig_params = {k: v for k, v in params.items() if k not in RULE_PARAMS}
+    rule_params = {k: v for k, v in params.items() if k in RULE_PARAMS}
+
+    raw = strategy.fn(df, **sig_params)
+
+    hold_min = rule_params.pop("hold_min", None)
+    max_hold = None
+    if hold_min is not None:
+        max_hold = max(int(round(float(hold_min) / bar_minutes(df))), 1)
+
+    merged = {**strategy.rules, **rule_params}
+    return apply_rules(
+        raw,
+        df,
+        max_hold_bars=max_hold,
+        entry_window=strategy.entry_window,
+        flatten_at=strategy.flatten_at,
+        **merged,
+    )
 
 
-def rsi_reversion(
-    df: pd.DataFrame, length: int = 14, low: float = 30.0, high: float = 70.0
-) -> pd.Series:
-    """Buy oversold, sell overbought, flatten in the middle band.
-
-    Mean reversion is the structurally more plausible intraday equity-index edge,
-    but it is also the one most sensitive to slippage.
-    """
-    close = df["close"]
-    delta = close.diff()
-    gain = delta.clip(lower=0).ewm(alpha=1 / length, adjust=False).mean()
-    loss = (-delta.clip(upper=0)).ewm(alpha=1 / length, adjust=False).mean()
-    rs = gain / loss.replace(0, np.nan)
-    rsi = 100 - 100 / (1 + rs)
-
-    sig = pd.Series(0.0, index=df.index)
-    sig[rsi < low] = 1.0
-    sig[rsi > high] = -1.0
-    # Hold the position until the opposite band, rather than flip-flopping in the middle.
-    return sig.replace(0.0, np.nan).ffill().fillna(0.0)
+# --------------------------------------------------------------------------- #
+# Signal generators
+# --------------------------------------------------------------------------- #
 
 
 def opening_range_breakout(
-    df: pd.DataFrame, minutes: int = 30, stretch: float = 0.0
+    df: pd.DataFrame, or_minutes: int = 30, buffer_ticks: float = 2.0
 ) -> pd.Series:
-    """Trade the break of the first N minutes of the cash session.
+    """Break of the first N minutes' range.
 
-    A genuinely ES-specific pattern, and one where session handling matters: the
-    range must reset every day, so this groups by exchange-local date.
+    The most-traded index day-trade template. The buffer exists because the exact
+    range edge is where stop orders cluster and where a break is most likely to be
+    a wick rather than a move.
     """
-    local = df.index.tz_convert("America/New_York")
-    day = pd.Series(local.date, index=df.index)
-    # Seconds via pandas, not raw integer views: the index resolution differs
-    # between pandas versions and a wrong unit here silently changes how many
-    # bars make up the opening range.
-    bar_seconds = float(pd.Series(df.index).diff().dropna().dt.total_seconds().median())
-    bar_min = max(int(round(bar_seconds / 60.0)), 1)
-    n_bars = max(minutes // bar_min, 1)
-
-    high = df["high"]
-    low = df["low"]
+    or_high, or_low, formed = opening_range(df, or_minutes)
+    pad = buffer_ticks * 0.25
     close = df["close"]
 
-    # Rolling position within each day, so we know when the opening range closes.
-    seq = day.groupby(day).cumcount()
-    or_high = high.where(seq < n_bars).groupby(day).cummax().ffill()
-    or_low = low.where(seq < n_bars).groupby(day).cummin().ffill()
-
-    pad = stretch * (or_high - or_low)
     sig = pd.Series(0.0, index=df.index)
-    active = seq >= n_bars
-    sig[active & (close > or_high + pad)] = 1.0
-    sig[active & (close < or_low - pad)] = -1.0
-    # Flatten into the close rather than carrying overnight risk.
-    sig = sig.groupby(day).ffill().fillna(0.0)
-    sig[~active] = 0.0
-    return sig
+    sig[formed & (close > or_high + pad)] = 1.0
+    sig[formed & (close < or_low - pad)] = -1.0
+    return sig.fillna(0.0)
 
+
+def vwap_reversion(df: pd.DataFrame, n_sigma: float = 2.0, exit_sigma: float = 0.5) -> pd.Series:
+    """Fade a stretch away from session VWAP, targeting a return toward it.
+
+    Structurally the more plausible intraday index edge -- the cash session spends
+    most of its time rotating around VWAP -- and also the one most sensitive to
+    slippage, since it trades against short-term momentum.
+    """
+    vwap, upper, lower = vwap_bands(df, n_sigma)
+    close = df["close"]
+    dev = close - vwap
+    scale = (upper - vwap).replace(0, np.nan)
+    z = dev / scale * n_sigma
+
+    sig = pd.Series(np.nan, index=df.index)
+    sig[close < lower] = 1.0
+    sig[close > upper] = -1.0
+    # Flatten once price has come back within the inner band.
+    sig[z.abs() < exit_sigma] = 0.0
+    return sig.ffill().fillna(0.0)
+
+
+def gap_fade(df: pd.DataFrame, min_gap_pts: float = 5.0, max_gap_pts: float = 40.0) -> pd.Series:
+    """Fade the overnight gap back toward the prior session's close.
+
+    Large gaps are excluded rather than treated as stronger versions of small
+    ones: a 60-point gap is usually news, and news gaps trend rather than fill.
+    """
+    prior = prior_session_levels(df)
+    open_px = session_open_price(df)
+    gap = open_px - prior["prior_close"]
+
+    tradable = gap.abs().between(min_gap_pts, max_gap_pts)
+    close = df["close"]
+
+    sig = pd.Series(0.0, index=df.index)
+    # Gap up -> fade short until price has filled back to the prior close.
+    sig[tradable & (gap > 0) & (close > prior["prior_close"])] = -1.0
+    sig[tradable & (gap < 0) & (close < prior["prior_close"])] = 1.0
+    return sig.fillna(0.0)
+
+
+def prior_day_break(df: pd.DataFrame, buffer_ticks: float = 4.0) -> pd.Series:
+    """Break of the previous session's high or low.
+
+    Yesterday's extremes are the levels most visible to everyone, which is the
+    argument both for the setup working and for it being crowded.
+    """
+    prior = prior_session_levels(df)
+    pad = buffer_ticks * 0.25
+    close = df["close"]
+
+    sig = pd.Series(0.0, index=df.index)
+    sig[close > prior["prior_high"] + pad] = 1.0
+    sig[close < prior["prior_low"] - pad] = -1.0
+    return sig.fillna(0.0)
+
+
+def opening_drive(df: pd.DataFrame, drive_minutes: int = 15, min_move_pts: float = 4.0) -> pd.Series:
+    """Continuation in the direction of the session's first move.
+
+    Requires the initial move to clear a threshold, so a flat, directionless open
+    produces no trade rather than a coin flip.
+    """
+    day = session_date(df)
+    elapsed = minutes_since_open(df)
+
+    in_drive = elapsed < drive_minutes
+    # Close at the end of the drive window, and the session's opening print.
+    drive_close = df["close"].where(in_drive).groupby(day).last()
+    open_first = df["open"].groupby(day).first()
+    move_by_day = drive_close - open_first
+
+    drive_move = pd.Series(
+        move_by_day.reindex(day.to_numpy()).to_numpy(), index=df.index
+    )
+
+    sig = pd.Series(0.0, index=df.index)
+    active = ~in_drive
+    sig[active & (drive_move >= min_move_pts)] = 1.0
+    sig[active & (drive_move <= -min_move_pts)] = -1.0
+    return sig.fillna(0.0)
+
+
+def vwap_trend(df: pd.DataFrame, pullback_ticks: float = 8.0, slope_bars: int = 10) -> pd.Series:
+    """Buy pullbacks to a rising VWAP, sell rallies to a falling one.
+
+    The trend-following counterpart to :func:`vwap_reversion`. Both cannot be
+    right in the same regime, which makes the pair a useful check on whether a
+    result reflects the market or the search.
+    """
+    vwap = session_vwap(df)
+    close = df["close"]
+    slope = vwap.diff(slope_bars)
+    dist = close - vwap
+    pad = pullback_ticks * 0.25
+
+    sig = pd.Series(0.0, index=df.index)
+    sig[(slope > 0) & (dist < 0) & (dist > -pad)] = 1.0
+    sig[(slope < 0) & (dist > 0) & (dist < pad)] = -1.0
+    return sig.fillna(0.0)
+
+
+# --------------------------------------------------------------------------- #
+# Registry
+# --------------------------------------------------------------------------- #
+
+_HOLDS = [10, 15, 20, 30]  # minutes; the day-trade holding window under test
 
 REGISTRY: dict[str, Strategy] = {
-    "ma_crossover": Strategy(
-        name="ma_crossover",
-        fn=ma_crossover,
-        grid={"fast": [5, 10, 20, 30, 50], "slow": [50, 100, 150, 200]},
-    ),
-    "rsi_reversion": Strategy(
-        name="rsi_reversion",
-        fn=rsi_reversion,
-        grid={"length": [7, 14, 21], "low": [20.0, 25.0, 30.0], "high": [70.0, 75.0, 80.0]},
-    ),
     "opening_range_breakout": Strategy(
         name="opening_range_breakout",
         fn=opening_range_breakout,
-        grid={"minutes": [15, 30, 60], "stretch": [0.0, 0.1, 0.25]},
+        grid={
+            "or_minutes": [15, 30, 60],
+            "buffer_ticks": [0.0, 2.0, 4.0],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("09:45", "12:00"),
+        description="Break of the first N minutes' range",
+        rules={"max_trades_per_day": 2, "cooldown_bars": 2},
+    ),
+    "vwap_reversion": Strategy(
+        name="vwap_reversion",
+        fn=vwap_reversion,
+        grid={
+            "n_sigma": [1.5, 2.0, 2.5],
+            "exit_sigma": [0.0, 0.5, 1.0],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("10:00", "15:00"),
+        description="Fade a stretch from session VWAP",
+        rules={"max_trades_per_day": 3, "cooldown_bars": 4},
+    ),
+    "gap_fade": Strategy(
+        name="gap_fade",
+        fn=gap_fade,
+        grid={
+            "min_gap_pts": [3.0, 5.0, 10.0],
+            "max_gap_pts": [25.0, 40.0],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("09:30", "11:00"),
+        description="Fade the overnight gap toward prior close",
+        rules={"max_trades_per_day": 1, "cooldown_bars": 0},
+    ),
+    "prior_day_break": Strategy(
+        name="prior_day_break",
+        fn=prior_day_break,
+        grid={
+            "buffer_ticks": [0.0, 4.0, 8.0],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("09:30", "14:00"),
+        description="Break of prior session high/low",
+        rules={"max_trades_per_day": 2, "cooldown_bars": 4},
+    ),
+    "opening_drive": Strategy(
+        name="opening_drive",
+        fn=opening_drive,
+        grid={
+            "drive_minutes": [5, 15, 30],
+            "min_move_pts": [2.0, 4.0, 8.0],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("09:35", "11:00"),
+        description="Continuation of the session's first move",
+        rules={"max_trades_per_day": 1, "cooldown_bars": 0},
+    ),
+    "vwap_trend": Strategy(
+        name="vwap_trend",
+        fn=vwap_trend,
+        grid={
+            "pullback_ticks": [4.0, 8.0, 12.0],
+            "slope_bars": [5, 10, 20],
+            "hold_min": _HOLDS,
+        },
+        entry_window=("10:00", "15:00"),
+        description="Buy pullbacks to a rising VWAP",
+        rules={"max_trades_per_day": 3, "cooldown_bars": 4},
     ),
 }
 

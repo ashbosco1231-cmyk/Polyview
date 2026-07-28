@@ -17,6 +17,20 @@ def bars():
     return generate(start="2023-01-02", end="2023-06-30", bar="5min", seed=3)
 
 
+def _ma_crossover(df, fast=20, slow=100):
+    """A plain trend signal, local to these tests.
+
+    The engine must be testable independently of whichever strategies happen to
+    live in the registry, so this deliberately does not import one. It is also
+    free of session/timing rules, which is what makes it a clean probe for the
+    engine's own accounting.
+    """
+    if fast >= slow:
+        return pd.Series(0.0, index=df.index)
+    close = df["close"]
+    return np.sign(close.rolling(fast).mean() - close.rolling(slow).mean()).fillna(0.0)
+
+
 def _flat_frame(prices):
     idx = pd.date_range("2024-01-02 14:30", periods=len(prices), freq="1min", tz="UTC")
     return pd.DataFrame(
@@ -101,11 +115,9 @@ class TestBackAdjustment:
 
     def test_raw_data_creates_phantom_edge(self, bars):
         """The reason back-adjustment is not optional."""
-        from esbt.strategies import ma_crossover
-
-        raw_res = backtest(bars, ma_crossover(bars, 10, 50), ES)
+        raw_res = backtest(bars, _ma_crossover(bars, 10, 50), ES)
         adj = back_adjust(bars)
-        adj_res = backtest(adj, ma_crossover(adj, 10, 50), ES)
+        adj_res = backtest(adj, _ma_crossover(adj, 10, 50), ES)
         # The roll steps are pure artifact; they must move the result.
         assert raw_res.equity.iloc[-1] != pytest.approx(adj_res.equity.iloc[-1])
 
@@ -140,10 +152,8 @@ class TestAnnualization:
 
     def test_sharpe_is_physically_plausible(self):
         """A trend strategy on random data must not report a Sharpe above ~5."""
-        from esbt.strategies import ma_crossover
-
         b = back_adjust(generate(start="2023-01-02", end="2023-12-29", bar="15min", seed=11))
-        res = backtest(b, ma_crossover(b, 20, 100), ES)
+        res = backtest(b, _ma_crossover(b, 20, 100), ES)
         assert abs(res.stats["sharpe"]) < 5.0, (
             f"implausible Sharpe {res.stats['sharpe']:.1f} -- check annualization"
         )
@@ -171,13 +181,11 @@ class TestNoEdgeOnRandomData:
     """
 
     def test_no_systematic_edge_across_seeds(self):
-        from esbt.strategies import ma_crossover
-
         results = []
         for seed in range(24):
             b = generate(start="2023-01-02", end="2023-06-30", bar="5min", seed=seed)
             a = back_adjust(b)
-            results.append(backtest(a, ma_crossover(a, 20, 100), ES).equity.iloc[-1])
+            results.append(backtest(a, _ma_crossover(a, 20, 100), ES).equity.iloc[-1])
 
         arr = np.array(results, dtype=float)
         stderr = arr.std(ddof=1) / np.sqrt(len(arr))
