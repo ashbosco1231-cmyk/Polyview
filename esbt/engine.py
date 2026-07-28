@@ -102,7 +102,11 @@ def backtest(
 
     # The one line that makes lookahead impossible: a signal formed at the close
     # of bar i can only be held starting from the open of bar i+1.
-    position = (sig.shift(1).fillna(0.0) * contracts).apply(np.fix)
+    # np.fix is applied to the underlying array rather than through Series.apply,
+    # which dispatches once per element in Python and dominated sweep runtime.
+    position = pd.Series(
+        np.fix(sig.shift(1).fillna(0.0).to_numpy(dtype=float) * contracts), index=df.index
+    )
 
     open_px = df["open"].to_numpy(dtype=float)
     pos = position.to_numpy(dtype=float)
@@ -153,11 +157,14 @@ def _extract_trades(
     entry_i = None
     entry_pos = 0.0
 
-    for i in range(len(pos)):
+    # Only bars where the position actually changes can open or close a trade.
+    # Scanning every bar re-checks millions of no-ops during a parameter sweep.
+    change_points = np.flatnonzero(np.diff(pos, prepend=0.0) != 0.0)
+
+    for i in change_points:
+        i = int(i)
         prev = pos[i - 1] if i > 0 else 0.0
         cur = pos[i]
-        if cur == prev:
-            continue
         # Close any open position first.
         if entry_i is not None and (np.sign(cur) != np.sign(entry_pos) or cur == 0):
             points = (open_px[i] - open_px[entry_i]) * np.sign(entry_pos)

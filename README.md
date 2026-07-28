@@ -141,6 +141,69 @@ Reference output on random-walk data, which is what "nothing" looks like:
 
 ---
 
+## Beating the textbook version: regime filters
+
+The standard setups fail on ES largely because they are applied
+*unconditionally*. An opening-range break is a different trade on a quiet
+Tuesday than on a CPI morning; fading VWAP is sound on a rotational day and
+ruinous on a trend day. Filtering is where an edge beyond common belief actually
+lives, so any strategy can be gated by any combination of regime conditions:
+
+| Filter | Condition |
+|---|---|
+| `volatility_regime` | ATR percentile band, ranked against recent history |
+| `opening_range_size` | Today's opening range width vs recent days |
+| `trend_day` | Trending vs rotational session, measured causally |
+| `gap_size` | Overnight gap size band |
+| `minutes_into_session` | Slice of the session |
+| `day_of_week` | Weekday restriction (usually a trap) |
+
+```bash
+python scripts/screen.py --filters volatility_regime trend_day
+```
+
+Filters compose with any strategy and their grids merge into the search, so the
+walk-forward optimizes the setup and the conditions together.
+
+**Every filter is strictly causal**, and this is tested rather than asserted.
+`trend_day` in particular classifies a session from the running share of bars
+that have closed above VWAP — *not* from where the session eventually closed,
+which is the canonical intraday lookahead bug and produces magnificent fictional
+results. Note that a lookahead filter cheats identically in-sample and
+out-of-sample, so walk-forward alone will not catch it; the test suite truncates
+the data mid-session and requires the filter's earlier values to be unchanged,
+and a deliberately cheating filter is included to prove that probe actually
+fires.
+
+### Filters are not free
+
+Each filter multiplies the search space, and the noise floor rises with it.
+Adding two filters to a 36-combination grid takes it to 576, which moved the
+floor from 1.99 to 2.87 Sharpe in testing. You need a proportionally better
+result to claim the same thing.
+
+## The ledger: iterating *is* multiple testing
+
+Adjust a threshold, add a filter, try a different range, re-run. After a
+fortnight of that you may have tested twenty thousand variants, and the best one
+you have seen is drawn from twenty thousand draws — not from the 216 in your last
+command. Judged against the single-run floor it will look convincing.
+
+Every screen appends to `data/ledger.json`, and the cumulative trial count feeds
+a second, higher bar:
+
+```
+Cumulative search: 3,456 hypotheses recorded to date.
+Noise floor against that total: 2.89 Sharpe
+Nothing clears it. Every result so far is within what the search alone would produce.
+```
+
+It counts only what it is told about, so it is a floor on your true search effort
+rather than an exact figure. Nothing here blocks you; it makes the cost of
+looking harder visible at the moment you look.
+
+---
+
 ## What the harness refuses to let you do
 
 **Look ahead.** A strategy emits a target position from information available at
@@ -223,6 +286,8 @@ esbt/
   strategies.py   six NY-session day-trade setups and their grids
   rules.py        time stops, entry windows, flat-into-the-bell, trade budgets
   session.py      session VWAP, opening range, prior-day levels, activity stats
+  filters.py      causal regime filters and strategy composition
+  ledger.py       cumulative record of every hypothesis tested
   walkforward.py  parameter sweep, walk-forward, overfitting diagnostics
   report.py       terminal reporting
   synthetic.py    random-walk data generator for offline calibration
@@ -230,7 +295,7 @@ scripts/
   fetch_data.py   price and download data
   optimize.py     run a walk-forward optimization on one strategy
   screen.py       walk-forward every strategy and rank the survivors
-tests/            41 tests, focused on what would silently corrupt results
+tests/            59 tests, focused on what would silently corrupt results
 ```
 
 ```bash

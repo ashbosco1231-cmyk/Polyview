@@ -34,7 +34,13 @@ import pandas as pd
 from .config import Instrument
 from .engine import backtest
 from .session import bar_minutes, trade_activity
-from .strategies import Strategy, build_signal
+from .strategies import (
+    Strategy,
+    apply_execution,
+    build_signal,
+    masked_signal,
+    signal_cache_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -63,9 +69,20 @@ def sweep(
     """
     grid = grid if grid is not None else strategy.grid
     rows = []
+    # Signal generation and filter evaluation depend only on the signal/filter
+    # parameters, so varying the holding time re-derives an identical series.
+    # Memoizing that stage is the difference between a sweep that takes minutes
+    # and one that takes seconds, which decides whether iterating is practical.
+    signal_memo: dict[tuple, pd.Series] = {}
+
     for combo_id, params in enumerate(param_combos(grid)):
         try:
-            sig = build_signal(strategy, df, **params)
+            key = signal_cache_key(strategy, params)
+            raw = signal_memo.get(key)
+            if raw is None:
+                raw = masked_signal(strategy, df, **params)
+                signal_memo[key] = raw
+            sig = apply_execution(strategy, df, raw, **params)
         except Exception as exc:  # a bad param combo should not kill the sweep
             log.debug("params %s failed: %s", params, exc)
             continue

@@ -38,6 +38,9 @@ from .session import (
 # Parameters consumed by the execution-rule layer rather than the signal itself.
 RULE_PARAMS = {"hold_min", "max_trades_per_day", "cooldown_bars"}
 
+# Prefix marking a parameter as belonging to a regime filter: f__<filter>__<param>.
+FILTER_PREFIX = "f__"
+
 
 @dataclass(frozen=True)
 class Strategy:
@@ -50,19 +53,90 @@ class Strategy:
     flatten_at: str = "15:55"
     description: str = ""
     rules: dict = field(default_factory=dict)
+    filters: tuple[str, ...] = ()
 
 
-def build_signal(strategy: Strategy, df: pd.DataFrame, **params) -> pd.Series:
-    """Generate a strategy's signal and apply its execution rules.
+def _split_filter_params(params: dict) -> dict[str, dict]:
+    """Group ``f__<filter>__<param>`` keys back into per-filter kwargs."""
+    grouped: dict[str, dict] = {}
+    for key, value in params.items():
+        if not key.startswith(FILTER_PREFIX):
+            continue
+        _, filter_name, param = key.split("__", 2)
+        grouped.setdefault(filter_name, {})[param] = value
+    return grouped
 
-    Splits ``params`` into signal parameters and rule parameters, so a walk-forward
-    search can optimize the holding time alongside the setup's own thresholds.
+
+def with_filters(strategy: Strategy, *filter_names: str, suffix: str | None = None) -> Strategy:
+    """Return a copy of ``strategy`` gated by one or more regime filters.
+
+    The filters' own grids are merged into the strategy's under namespaced keys,
+    so the walk-forward searches the setup and the conditions together.
+
+    Be aware of what this costs statistically: each filter multiplies the number
+    of combinations, and the noise floor rises accordingly. Adding two filters to
+    a 36-combination grid can take it past 500, at which point the best result
+    you find is expected to look good on luck alone.
     """
-    sig_params = {k: v for k, v in params.items() if k not in RULE_PARAMS}
-    rule_params = {k: v for k, v in params.items() if k in RULE_PARAMS}
+    from . import filters as filters_mod
 
+    merged = dict(strategy.grid)
+    for name in filter_names:
+        f = filters_mod.get(name)
+        for param, values in f.grid.items():
+            merged[f"{FILTER_PREFIX}{name}__{param}"] = values
+
+    label = suffix or "+".join(filter_names)
+    return Strategy(
+        name=f"{strategy.name}[{label}]",
+        fn=strategy.fn,
+        grid=merged,
+        entry_window=strategy.entry_window,
+        flatten_at=strategy.flatten_at,
+        description=f"{strategy.description} filtered by {label}",
+        rules=dict(strategy.rules),
+        filters=tuple(filter_names),
+    )
+
+
+def signal_cache_key(strategy: Strategy, params: dict) -> tuple:
+    """Key identifying the expensive, rule-independent part of a parameter set.
+
+    Signal generation and filter evaluation depend only on the signal and filter
+    parameters. Holding time and trade budgets do not change them at all, so a
+    sweep varying ``hold_min`` over four values recomputes identical pandas work
+    four times unless it is told not to.
+    """
+    return tuple(sorted(
+        (k, v) for k, v in params.items() if k not in RULE_PARAMS
+    ))
+
+
+def masked_signal(strategy: Strategy, df: pd.DataFrame, **params) -> pd.Series:
+    """The raw signal with regime filters applied, before execution rules."""
+    sig_params = {
+        k: v for k, v in params.items()
+        if k not in RULE_PARAMS and not k.startswith(FILTER_PREFIX)
+    }
     raw = strategy.fn(df, **sig_params)
 
+    if strategy.filters:
+        from . import filters as filters_mod
+
+        filter_params = _split_filter_params(params)
+        spec = {name: filter_params.get(name, {}) for name in strategy.filters}
+        mask = filters_mod.combine(df, spec)
+        # Suppress the signal outside the permitted regime. Positions already open
+        # are still managed by the rule layer, which owns all exit logic.
+        raw = raw.where(mask, 0.0)
+    return raw
+
+
+def apply_execution(
+    strategy: Strategy, df: pd.DataFrame, raw: pd.Series, **params
+) -> pd.Series:
+    """Apply execution rules to an already-filtered signal."""
+    rule_params = {k: v for k, v in params.items() if k in RULE_PARAMS}
     hold_min = rule_params.pop("hold_min", None)
     max_hold = None
     if hold_min is not None:
@@ -77,6 +151,16 @@ def build_signal(strategy: Strategy, df: pd.DataFrame, **params) -> pd.Series:
         flatten_at=strategy.flatten_at,
         **merged,
     )
+
+
+def build_signal(strategy: Strategy, df: pd.DataFrame, **params) -> pd.Series:
+    """Generate a strategy's signal, apply regime filters, then execution rules.
+
+    Splits ``params`` three ways -- signal, filter and rule parameters -- so a
+    walk-forward search can optimize the setup, the conditions under which it is
+    allowed to trade, and the holding time, all together.
+    """
+    return apply_execution(strategy, df, masked_signal(strategy, df, **params), **params)
 
 
 # --------------------------------------------------------------------------- #
